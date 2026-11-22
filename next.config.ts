@@ -1,17 +1,44 @@
 import type { NextConfig } from "next";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
+
+const embedHosts = "https://www.youtube-nocookie.com https://open.spotify.com https://w.soundcloud.com";
+
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      // Next.js injects inline bootstrap scripts.
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https://media.fucktheclubup.com https://*.googleusercontent.com",
+      "media-src 'self' blob: https://media.fucktheclubup.com",
+      // Browser uploads go straight to R2.
+      "connect-src 'self' https://*.r2.cloudflarestorage.com",
+      `frame-src ${embedHosts}`,
+      "font-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self' https://accounts.google.com",
+      "frame-ancestors 'none'",
+    ].join("; "),
+  },
+];
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
+  poweredByHeader: false,
+  async headers() {
+    // /media sets its own stricter, sandboxed headers in its route handler.
+    return [{ source: "/((?!media/).*)", headers: securityHeaders }];
   },
 };
 
 export default nextConfig;
+
+// Gives `next dev` local D1/R2 bindings through Wrangler.
+initOpenNextCloudflareForDev();

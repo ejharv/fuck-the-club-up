@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://fucktheclubup.com",
+          "https://www.fucktheclubup.com",
+          "https://fuck-the-club-up.ejharv.workers.dev"
+        ],
+        "methods": ["PUT"],
+        "headers": ["content-type"]
+      },
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

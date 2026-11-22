@@ -1,0 +1,11 @@
+# Copy to .dev.vars for local dev (gitignored). Never commit real values.
+AUTH_SECRET=generate-with-npx-auth-secret-or-openssl-rand-base64-33
+AUTH_GOOGLE_ID=your-google-oauth-client-id.apps.googleusercontent.com
+AUTH_GOOGLE_SECRET=your-google-oauth-client-secret
+# Your Google email(s); added as admin on first sign-in. Comma-separated.
+ADMIN_EMAILS=you@gmail.com
+# Leave the R2 keys empty locally: uploads then go through the local emulator.
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+# Local dev only: upload through the Worker into the R2 emulator. Never set in production.
+ALLOW_LOCAL_UPLOADS=1
