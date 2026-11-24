@@ -448,14 +448,14 @@ function SaveSpot({ token, me, emailHint }: { token: string; me: { path: string 
       <h2 id="spot-h" className="display text-2xl">{hint ? "You're set" : "Get your link by email"}</h2>
       {hint && !editing ? (
         <p className="mt-2 text-dim">
-          Your link and a reminder on the day go to <strong className="text-ink">{hint}</strong>. Open it from the email and you&apos;re back in as you.
+          Your link, a heads-up when photos open and a last call before they close go to <strong className="text-ink">{hint}</strong>. Open it from the email and you&apos;re back in as you.
         </p>
       ) : (
         <>
           <p className="mt-2 text-dim">
             {inApp
               ? `${inApp} doesn't always keep you signed in. Get your personal link by email and you can get back in from any phone or browser. Optional.`
-              : "We'll email your personal link and a reminder on the day, so you can get back in from any phone or browser. Optional."}
+              : "We'll email your personal link, plus a heads-up when photos open and before they close, so you can get back in from any phone or browser. Optional."}
           </p>
           <form
             className="mt-3 flex flex-col gap-2 sm:flex-row"
@@ -535,17 +535,17 @@ function GuestClaude({ token, text, onUse }: { token: string; text: string; onUs
       const res = await fetch(`/api/drop/${token}/assist`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, text }) });
       const data = (await res.json().catch(() => ({}))) as { text?: string; headsUp?: string[]; left?: number; error?: string };
       if (typeof data.left === "number") setLeft(data.left);
-      if (!res.ok || !data.text) setErr(data.error ?? "Claude couldn't help with that one.");
+      if (!res.ok || !data.text) setErr(data.error ?? "Couldn't help with that one.");
       else setS({ text: data.text, headsUp: data.headsUp ?? [] });
     } catch {
-      setErr("Couldn't reach Claude. Check your connection.");
+      setErr("Couldn't connect. Check your connection.");
     } finally {
       setBusy(null);
     }
   }
   return (
     <div className="mt-3 rounded-md border border-dashed border-pink/60 p-3">
-      <p className="text-sm"><span className="mono text-pink">Ask Claude</span> <span className="text-dim">{left === null ? "A few tries per person." : `${left} ${left === 1 ? "try" : "tries"} left.`}</span></p>
+      <p className="text-sm"><span className="mono text-pink">Writing help</span> <span className="text-dim">{left === null ? "A few tries per person." : `${left} ${left === 1 ? "try" : "tries"} left.`}</span></p>
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
         {modes.map(([m, label]) => (
           <button key={m} type="button" disabled={Boolean(busy) || text.trim().length < 10 || left === 0} onClick={() => ask(m)} className="min-h-11 rounded-full border border-line px-3 text-sm font-bold hover:border-pink disabled:opacity-50">
@@ -828,7 +828,7 @@ function Account({ token, account, defaultName, count }: { token: string; accoun
     <section id="story" className="mt-14 scroll-mt-4">
       <h2 className="display text-3xl">Your side of the story</h2>
       <p className="mt-2 text-dim">
-        What happened, from where you were standing. Times, prices, the line, who did what. Use nicknames for other people unless they said yes. Claude stitches everyone&apos;s version into one post.
+        What happened, from where you were standing. Times, prices, the line, who did what. Use nicknames for other people unless they said yes. Everyone&apos;s version gets stitched into one post.
       </p>
       {count > 0 && <p className="mono mt-3 text-maize">{plural(count, "story", "stories")} in so far</p>}
       <label htmlFor="acct-nick" className="mt-5 block font-bold">Your name or nickname <span className="font-normal text-dim">(this is what shows up)</span></label>
@@ -878,7 +878,7 @@ function Review({ token, draft, body, wrote }: { token: string; draft: Draft; bo
   ].filter(([, v]) => v);
   return (
     <section id="draft" className="mt-14 scroll-mt-4">
-      <p className="mono text-pink">Claude&apos;s draft · version {draft.version}</p>
+      <p className="mono text-pink">The draft · version {draft.version}</p>
       <h2 className="display mt-2 text-3xl">Is this how it went?</h2>
       <p className="mt-2 text-dim">Read it, leave notes, approve it when it&apos;s right. Check that nobody&apos;s real name slipped in.</p>
       <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">

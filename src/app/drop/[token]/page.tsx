@@ -125,7 +125,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
     phase === "invite"
       ? "This is the party link. RSVP now; once the night starts, this same link takes the photos."
       : phase === "live"
-        ? "It's on. Drop your photos and videos and tell your side. Claude turns it all into one post."
+        ? "It's on. Drop your photos and videos and tell your side. It all becomes one post."
         : phase === "after"
           ? "Photos and stories are in. Read the draft, leave notes, approve it when it's right."
           : "The night's been written up. Thanks for being there.";

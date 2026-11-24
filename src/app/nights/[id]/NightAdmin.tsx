@@ -320,7 +320,7 @@ function VenuesPanel({ nightId, venues }: { nightId: string; venues: Venue[] }) 
   const named = venues.filter((v) => v.name).length;
   return (
     <Panel id="places" step={5} title="Places you went" meta={named ? `${named} saved` : "None saved"}>
-      <p className="text-dim">Name, website, and whether it was for partying or eating. Claude links names to these websites, and when the night drops they show up on the Places tab, linked back to this night.</p>
+      <p className="text-dim">Name, website, and whether it was for partying or eating. Place names in the draft link to these websites, and when the night drops they show up on the Places tab, linked back to this night.</p>
       <div className="mt-4">
         <VenuesEditor rows={rows} setRows={setRows} onChange={() => setSaved(false)} />
       </div>
@@ -567,7 +567,7 @@ function DraftPanel({
     setGenError(null);
     try {
       const res = await fetch(`/api/nights/${nightId}/generate`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ rewrite }) });
-      if (!res.ok) setGenError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Claude couldn't write the draft.");
+      if (!res.ok) setGenError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't write the draft.");
       else router.refresh();
     } finally {
       setBusy(false);
@@ -601,7 +601,7 @@ function DraftPanel({
     >
       <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
         <button type="button" disabled={busy || !accountCount} onClick={() => generate(false)} className={btnMaize}>
-          {busy ? "Claude is writing… keep this tab open" : draft ? "Write a fresh draft" : "Write the draft with Claude"}
+          {busy ? "Writing the draft… keep this tab open" : draft ? "Write a fresh draft" : "Write the draft"}
         </button>
         {draft && (
           <button type="button" disabled={busy || !review.notes.length} onClick={() => generate(true)} className={btnMaizeOutline}>
@@ -612,8 +612,8 @@ function DraftPanel({
           {editing ? "Cancel edit" : draft ? "Edit the text" : "Write it by hand"}
         </button>
       </div>
-      <p className="mono mt-3 text-dim">{generations} of {maxGenerations} Claude drafts used</p>
-      {!accountCount && <p className="mt-3 text-dim">Claude needs at least one account to work from.</p>}
+      <p className="mono mt-3 text-dim">{generations} of {maxGenerations} drafts used</p>
+      {!accountCount && <p className="mt-3 text-dim">The draft needs at least one story to work from.</p>}
       <ErrorLine error={genError} />
 
       {editing ? (

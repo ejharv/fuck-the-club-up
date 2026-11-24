@@ -77,13 +77,13 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&
 const when = (iso: string) =>
   new Date(iso).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Detroit" });
 
-export type EmailKind = "confirm" | "dayof" | "draft" | "dropped";
+export type EmailKind = "confirm" | "dayof" | "closing" | "draft" | "dropped";
 
 /** One of the four guest emails. Plain, short, one button. */
 export async function guestEmail(
   env: CloudflareEnv,
   kind: EmailKind,
-  n: { id: string; name: string; opens_at: string; location_text: string | null },
+  n: { id: string; name: string; opens_at: string; closes_at?: string; location_text: string | null },
   token: string,
   device: string,
   postSlug?: string | null,
@@ -97,20 +97,32 @@ export async function guestEmail(
       lines: [
         `You're on the list for ${name}, ${when(n.opens_at)}${n.location_text ? ` at ${n.location_text}` : ""}.`,
         "This button is your personal link. It signs you back in as you from any phone or browser, so you can drop photos and tell your side on the night. Don't forward it.",
-        "We'll email you once more on the day, and when the write-up is ready. That's it.",
+        "We'll email you when photos open, before they close, and when the write-up is ready. That's it.",
       ],
       button: "Open my invite",
       url: link,
     },
     dayof: {
-      subject: `Tonight: ${name}`,
-      lines: [`It's tonight: ${when(n.opens_at)}${n.location_text ? `, ${n.location_text}` : ""}.`, "Use your link during the night to add photos and videos, then write your side after."],
-      button: "Open my link",
+      subject: `Photos are open: ${name}`,
+      lines: [
+        `${name} is on${n.location_text ? ` at ${n.location_text}` : ""}. Photos are open.`,
+        "Tap below to drop your photos and videos as the night goes, then write your side of the story after. It's your personal link, so you're already signed in.",
+      ],
+      button: "Add my photos",
+      url: link,
+    },
+    closing: {
+      subject: `Last call: ${name}`,
+      lines: [
+        `Photos and stories for ${name} close ${n.closes_at ? when(n.closes_at) : "soon"}.`,
+        "If you haven't yet, drop your photos and write your side of the night. Two minutes, tops. After that, it all gets written up.",
+      ],
+      button: "Add mine",
       url: link,
     },
     draft: {
       subject: `The write-up is ready: ${name}`,
-      lines: ["Claude turned everyone's side of the night into a draft. Read it, leave notes, and approve it if it's right."],
+      lines: ["Everyone's side of the night is now one draft. Read it, leave notes, and approve it if it's right."],
       button: "Read the draft",
       url: link,
     },
@@ -121,6 +133,15 @@ export async function guestEmail(
       url: postSlug ? `${SITE_URL}/posts/${postSlug}` : link,
     },
   };
+  const live = new Date(n.opens_at) <= new Date();
+  if (kind === "confirm" && live) {
+    copy.confirm.lines = [
+      `You're in for ${name}, and photos are open now.`,
+      "This button is your personal link. It signs you back in as you from any phone or browser: drop your photos and videos and write your side of the story. Don't forward it.",
+      "We'll email you before photos close, and when the write-up is ready. That's it.",
+    ];
+    copy.confirm.button = "Add my photos";
+  }
   const c = copy[kind];
   const text = `${c.lines.join("\n\n")}\n\n${c.button}: ${c.url}\n\n—\nFuck The Club Up · ${SITE_URL}\nYou're getting this because you added your email on a party invite. Unsubscribe and delete your email: ${unsubscribeUrl}\nIf this wasn't you, ignore it or unsubscribe and you won't hear from us again.`;
   const html = `<!doctype html><html><body style="margin:0;background:#0c0d1c;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#f2eee4">
@@ -138,7 +159,7 @@ export async function sendGuestEmail(
   env: CloudflareEnv,
   kind: EmailKind,
   row: { email_enc: string; device_id: string },
-  n: { id: string; name: string; opens_at: string; location_text: string | null; token_enc: string | null },
+  n: { id: string; name: string; opens_at: string; closes_at?: string; location_text: string | null; token_enc: string | null },
   postSlug?: string | null,
 ): Promise<boolean> {
   const to = await openEmail(env.AUTH_SECRET, row.email_enc);

@@ -58,10 +58,10 @@ export function ClaudeAssist({
         body: JSON.stringify({ mode, request: mode === "custom" ? request : undefined, venues, ...getFields() }),
       });
       const data = (await res.json().catch(() => ({}))) as Suggestion & { error?: string };
-      if (!res.ok) setError(data.error ?? "Claude couldn't help with that one. Try again.");
+      if (!res.ok) setError(data.error ?? "Couldn't help with that one. Try again.");
       else setS(data);
     } catch {
-      setError("Couldn't reach Claude. Check your connection.");
+      setError("Couldn't connect. Check your connection.");
     } finally {
       setBusy(null);
     }
@@ -78,10 +78,10 @@ export function ClaudeAssist({
 
   const changedFields = s ? FIELD_LABELS.filter(([k]) => s[k]) : [];
   return (
-    <section aria-label="Claude writing help" className="rounded-md border-2 border-dashed border-pink/70 p-4 sm:p-5">
+    <section aria-label="Writing help" className="rounded-md border-2 border-dashed border-pink/70 p-4 sm:p-5">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-11 w-full items-center justify-between gap-3 text-left">
         <span>
-          <span className="display text-xl text-pink">Ask Claude</span>
+          <span className="display text-xl text-pink">Writing help</span>
           <span className="block text-sm text-dim">As much or as little help as you want. Nothing changes until you pick &quot;Use this&quot;.</span>
         </span>
         <span aria-hidden className="mono text-pink">{open ? "Close" : "Open"}</span>
@@ -118,7 +118,7 @@ export function ClaudeAssist({
               {busy === "custom" ? "Working…" : "Ask"}
             </button>
           </div>
-          {busy && <p role="status" className="mt-3 text-sm text-dim">Claude is reading your post. This takes about 10 to 20 seconds.</p>}
+          {busy && <p role="status" className="mt-3 text-sm text-dim">Reading your post. This takes about 10 to 20 seconds.</p>}
           {error && <p role="alert" className="mt-3 text-pink">{error}</p>}
 
           {s && (

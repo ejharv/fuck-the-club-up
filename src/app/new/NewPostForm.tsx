@@ -108,7 +108,7 @@ export function NewPostForm({ today }: { today: string }) {
 
       <div>
         <label htmlFor="body" className="mb-2 block font-bold">The story</label>
-        <textarea id="body" name="body" required rows={12} maxLength={60000} onPaste={linkPaste} className="field leading-relaxed" placeholder="Start from the pregame. Short paragraphs, real details. Rough notes are fine: Ask Claude can turn them into a post." />
+        <textarea id="body" name="body" required rows={12} maxLength={60000} onPaste={linkPaste} className="field leading-relaxed" placeholder="Start from the pregame. Short paragraphs, real details. Rough notes are fine: writing help can turn them into a post." />
         <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link.</p>
       </div>
 

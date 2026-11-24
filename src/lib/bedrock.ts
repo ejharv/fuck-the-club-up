@@ -13,7 +13,7 @@ export async function converseWithTool<T>(
 ): Promise<{ input: T; usage: { inputTokens: number; outputTokens: number } }> {
   const keys = env as unknown as { BEDROCK_ACCESS_KEY_ID?: string; BEDROCK_SECRET_ACCESS_KEY?: string };
   if (!keys.BEDROCK_ACCESS_KEY_ID || !keys.BEDROCK_SECRET_ACCESS_KEY) {
-    throw new BedrockError("Claude isn't set up yet. Add the Bedrock access key to the site's secrets.");
+    throw new BedrockError("Writing help isn't set up yet. Add the Bedrock access key to the site's secrets.");
   }
   const region = env.BEDROCK_REGION || "us-east-1";
   const client = new AwsClient({
@@ -39,8 +39,8 @@ export async function converseWithTool<T>(
   if (!res.ok) {
     const text = await res.text();
     console.error("Bedrock error", res.status, text.slice(0, 500));
-    if (res.status === 429) throw new BedrockError("Claude is busy right now. Try again in a minute.");
-    throw new BedrockError("Claude couldn't write the draft. Try again, and check the Bedrock setup if it keeps failing.");
+    if (res.status === 429) throw new BedrockError("The writer is busy right now. Try again in a minute.");
+    throw new BedrockError("Couldn't write the draft. Try again, and check the Bedrock setup if it keeps failing.");
   }
   const data = (await res.json()) as {
     output?: { message?: { content?: Array<{ toolUse?: { name: string; input: T } }> } };
@@ -48,7 +48,7 @@ export async function converseWithTool<T>(
     stopReason?: string;
   };
   const use = data.output?.message?.content?.find((c) => c.toolUse?.name === tool.name)?.toolUse;
-  if (!use) throw new BedrockError("Claude's reply came back in the wrong shape. Try again.");
+  if (!use) throw new BedrockError("The reply came back in the wrong shape. Try again.");
   return { input: use.input, usage: data.usage ?? { inputTokens: 0, outputTokens: 0 } };
 }
 

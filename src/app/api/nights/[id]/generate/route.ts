@@ -46,7 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   )
     .bind(new Date().toISOString(), id, stale)
     .run();
-  if (!lock.meta.changes) return NextResponse.json({ error: "Claude is already writing this one. Hang tight." }, { status: 409 });
+  if (!lock.meta.changes) return NextResponse.json({ error: "The draft is already being written. Hang tight." }, { status: 409 });
 
   let succeeded = false;
   try {
