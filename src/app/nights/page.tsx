@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cf } from "@/lib/env";
+import { InviteCard } from "@/components/InviteCard";
+import { mediaUrl } from "@/lib/media-url";
 import { formatDay } from "@/lib/format";
 import { phaseOf, type Night } from "@/lib/nights";
 import { isAnyHost } from "@/lib/hosting";
@@ -45,6 +47,18 @@ export default async function NightsPage() {
       <p className="mt-2 max-w-xl text-dim">
         Each night gets one link: an invite before, a photo drop and everyone&apos;s story during and after, then the post.
       </p>
+      {/* Redraws any out-of-date link-preview card in the background, so opening this page is enough. */}
+      {results.map((n) => (
+        <InviteCard
+          key={`card-${n.id}`}
+          nightId={n.id}
+          name={n.name}
+          opensAt={n.opens_at}
+          mediaUrl={n.invite_media_key ? mediaUrl(n.invite_media_key, env.MEDIA_PUBLIC_URL) : null}
+          mediaKind={n.invite_media_kind}
+          storedSig={n.og_sig}
+        />
+      ))}
       {results.length ? (
         <ul className="mt-8 border-t border-line">
           {results.map((n) => (

@@ -61,10 +61,6 @@ export async function sendEmail(
         Simple: {
           Subject: { Data: msg.subject, Charset: "UTF-8" },
           Body: { Text: { Data: msg.text, Charset: "UTF-8" }, Html: { Data: msg.html, Charset: "UTF-8" } },
-          Headers: [
-            { Name: "List-Unsubscribe", Value: `<${msg.unsubscribeUrl}>` },
-            { Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click" },
-          ],
         },
       },
     }),
@@ -143,15 +139,13 @@ export async function guestEmail(
     copy.confirm.button = "Add my photos";
   }
   const c = copy[kind];
-  const text = `${c.lines.join("\n\n")}\n\n${c.button}: ${c.url}\n\n—\nFuck The Club Up · ${SITE_URL}\nYou're getting this because you added your email on a party invite. Unsubscribe and delete your email: ${unsubscribeUrl}\nIf this wasn't you, ignore it or unsubscribe and you won't hear from us again.`;
-  const html = `<!doctype html><html><body style="margin:0;background:#0c0d1c;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#f2eee4">
-<div style="max-width:520px;margin:0 auto">
-<p style="font-family:'Courier New',monospace;color:#ff3d8b;letter-spacing:1px;font-size:13px;margin:0 0 8px">FUCK THE CLUB UP</p>
-<h1 style="font-size:26px;line-height:1.15;margin:0 0 16px;text-transform:uppercase">${esc(c.subject)}</h1>
-${c.lines.map((l) => `<p style="font-size:16px;line-height:1.5;margin:0 0 14px">${esc(l)}</p>`).join("")}
-<p style="margin:22px 0"><a href="${esc(c.url)}" style="display:inline-block;background:#ffcb05;color:#0c0d1c;font-weight:bold;text-decoration:none;padding:14px 24px;border-radius:999px">${esc(c.button)}</a></p>
-<p style="font-size:12px;line-height:1.5;color:#9a97a8;margin:28px 0 0">You're getting this because you added your email on a party invite. <a href="${esc(unsubscribeUrl)}" style="color:#9a97a8">Unsubscribe and delete my email</a>. If this wasn't you, ignore it and you won't hear from us again.</p>
-</div></body></html>`;
+  const text = `${c.lines.join("\n\n")}\n\n${c.button}: ${c.url}\n\n—\nFTCU\nYou're getting this because you added your email on a party invite. Unsubscribe and delete your email: ${unsubscribeUrl}\nIf this wasn't you, ignore it or unsubscribe and you won't hear from us again.`;
+  // Deliberately plain: personal-looking mail lands in Gmail's Primary tab; designed layouts and big buttons go to Promotions.
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#222">
+${c.lines.map((l) => `<p style="margin:0 0 12px">${esc(l)}</p>`).join("")}
+<p style="margin:0 0 12px">${esc(c.button)}: <a href="${esc(c.url)}">${esc(c.url.replace(/^https:\/\//, "").slice(0, 60))}${c.url.length > 68 ? "…" : ""}</a></p>
+<p style="margin:16px 0 0;color:#777;font-size:13px">FTCU<br>You got this because you added your email on a party invite. <a href="${esc(unsubscribeUrl)}" style="color:#777">Unsubscribe and delete my email</a>.</p>
+</div>`;
   return { subject: c.subject, text, html, unsubscribeUrl };
 }
 
