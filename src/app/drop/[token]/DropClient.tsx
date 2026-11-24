@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import { soundcloudSearch, spotifySearch } from "@/lib/tracks";
 import { browserEnv, browserName, openOutHref, type BrowserEnv } from "@/lib/in-app";
 import { linkDomain, type Venue } from "@/lib/venues";
-import { addNote, rsvp, saveAccount, setApproval, addGuestSongs, addGuestSongPick, removeGuestSong, addGuestPlace, removeGuestPlace } from "@/app/drop/actions";
+import { addNote, rsvp, saveAccount, setApproval, addGuestSongs, addGuestSongPick, removeGuestSong, addGuestPlace, removeGuestPlace, setUploadCaption } from "@/app/drop/actions";
 import { ACCEPT_ATTR, ALLOWED_TYPES } from "@/lib/media-rules";
 import type { Phase } from "@/lib/nights";
 import { putWithProgress, scrubPhoto } from "@/lib/scrub-photo";
@@ -819,14 +819,62 @@ function Review({ token, draft, body, wrote }: { token: string; draft: Draft; bo
   );
 }
 
-function Album({ token, items }: { token: string; items: Array<{ key: string; kind: string; nickname: string | null }> }) {
+type AlbumItem = { key: string; kind: string; nickname: string | null; caption: string | null; mine: boolean };
+
+/** A guest's caption on their own upload: saves when they leave the box or hit enter. */
+function CaptionEdit({ token, item }: { token: string; item: AlbumItem }) {
+  const [value, setValue] = useState(item.caption ?? "");
+  const [saved, setSaved] = useState(item.caption ?? "");
+  const [state, setState] = useState<"idle" | "saving" | "saved" | string>("idle");
+  async function save() {
+    if (value.trim() === saved.trim()) return;
+    setState("saving");
+    const r = await setUploadCaption(token, item.key, value);
+    if (r && "error" in r) setState(r.error);
+    else {
+      setSaved(value);
+      setState("saved");
+    }
+  }
+  return (
+    <div className="px-2 pb-2">
+      <label htmlFor={`cap-${item.key}`} className="sr-only">Caption your {item.kind}</label>
+      <input
+        id={`cap-${item.key}`}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          setState("idle");
+        }}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        maxLength={200}
+        enterKeyHint="done"
+        placeholder="Add a caption"
+        className="w-full rounded border border-line bg-night px-2 py-2 text-sm focus:border-maize"
+      />
+      {state !== "idle" && (
+        <p role="status" className={`mt-1 text-xs ${state === "saving" ? "text-dim" : state === "saved" ? "text-maize" : "text-pink"}`}>
+          {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : state}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Album({ token, items, canCaption }: { token: string; items: AlbumItem[]; canCaption: boolean }) {
   if (!items.length) return null;
   const file = (k: string) => `/api/drop/${token}/file/${k}`;
   return (
     <section id="album" className="mt-14 scroll-mt-4">
       <h2 className="display text-3xl">The album</h2>
       <p className="mt-2 text-dim">
-        {plural(items.length, "file")}. Anyone with this link can see and download them.
+        {plural(items.length, "file")}. Anyone with this link can see and download them.{canCaption && items.some((m) => m.mine) ? " Caption yours: captions go in the post with the photo." : ""}
       </p>
       <ul className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
         {items.map((m) => (
@@ -849,6 +897,11 @@ function Album({ token, items }: { token: string; items: Array<{ key: string; ki
                 Save ↓
               </a>
             </div>
+            {m.mine && canCaption ? (
+              <CaptionEdit token={token} item={m} />
+            ) : (
+              m.caption && <p className="px-2 pb-2 text-sm leading-snug">{m.caption}</p>
+            )}
           </li>
         ))}
       </ul>
@@ -883,7 +936,7 @@ export function DropClient(props: {
   songs: GuestSong[];
   places: { approved: Venue[]; mine: Array<{ id: string; name: string; url: string | null; kind: string }> };
   accountCount: number;
-  album: Array<{ key: string; kind: string; nickname: string | null }>;
+  album: AlbumItem[];
   draft: Draft | null;
   draftBody: ReactNode;
 }) {
@@ -914,7 +967,7 @@ export function DropClient(props: {
       {showDraft && draftFirst && review}
       {showAccount && <Account token={token} account={props.account} defaultName={props.rsvp?.nickname ?? ""} count={props.accountCount} />}
       {showDraft && !draftFirst && review}
-      {phase !== "invite" && <Album token={token} items={props.album} />}
+      {phase !== "invite" && <Album token={token} items={props.album} canCaption={verified && canAct} />}
       {/* Room so the sticky upload bar never covers the last thing on the page. */}
       {verified && phase === "live" && <div aria-hidden className="h-24 sm:hidden" />}
     </>

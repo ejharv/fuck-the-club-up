@@ -40,6 +40,21 @@ export async function addGuestPlace(token: string, nameRaw: string, urlRaw: stri
   return { ok: true };
 }
 
+/** A guest captions one of their own uploads. Plain text only; hosts can still edit it. */
+export async function setUploadCaption(token: string, key: string, captionRaw: string): Promise<DropResult> {
+  const ctx = await ctxFor(token);
+  if ("error" in ctx) return ctx;
+  if (!isReviewable(ctx.night)) return { error: "This night already dropped." };
+  const caption = clean(captionRaw, 200);
+  if (caption && LINKISH.test(caption)) return { error: "No links in captions." };
+  const res = await ctx.env.DB.prepare("UPDATE night_uploads SET caption = ? WHERE r2_key = ? AND night_id = ? AND device_id = ? AND uploaded = 1")
+    .bind(caption || null, String(key), ctx.night.id, ctx.device)
+    .run();
+  if (!res.meta.changes) return { error: "You can only caption your own photos and videos." };
+  revalidatePath(`/drop/${token}`);
+  return { ok: true };
+}
+
 export async function removeGuestPlace(token: string, id: string): Promise<DropResult> {
   const ctx = await ctxFor(token);
   if ("error" in ctx) return ctx;

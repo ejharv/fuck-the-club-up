@@ -141,7 +141,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         songs={songs}
         places={places}
         accountCount={accountCount?.n ?? 0}
-        album={album.map((u) => ({ key: u.r2_key, kind: u.kind, nickname: u.nickname }))}
+        album={album.map((u) => ({ key: u.r2_key, kind: u.kind, nickname: u.nickname, caption: u.caption, mine: Boolean(device) && u.device_id === device }))}
         draft={
           draft && phase !== "dropped"
             ? {

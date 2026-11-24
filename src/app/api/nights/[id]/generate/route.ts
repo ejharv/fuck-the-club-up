@@ -50,7 +50,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   let succeeded = false;
   try {
-    const prompt = buildPrompt({ nightName: night.name, nightOf: night.night_of, accounts, venues, previous, notes });
+    const { results: captions } = await env.DB.prepare(
+      "SELECT nickname, kind, caption FROM night_uploads WHERE night_id = ? AND uploaded = 1 AND decision != 'toss' AND caption IS NOT NULL AND caption != '' ORDER BY created_at",
+    )
+      .bind(id)
+      .all<{ nickname: string | null; kind: string; caption: string }>();
+    const prompt = buildPrompt({ nightName: night.name, nightOf: night.night_of, accounts, venues, previous, notes, captions });
     const out = await writeDraft(env, prompt);
     const body = sanitizeDraftBody(out.body, new Set(venues.map((v) => v.url).filter((u): u is string => Boolean(u))));
     const version = (previous?.version ?? (await latestDraft(id))?.version ?? 0) + 1;

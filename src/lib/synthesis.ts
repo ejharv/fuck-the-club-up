@@ -81,6 +81,7 @@ export function buildPrompt(input: {
   venues: Array<{ name: string; url: string | null }>;
   previous?: Draft | null;
   notes?: Array<{ nickname: string | null; body: string }>;
+  captions?: Array<{ nickname: string | null; kind: string; caption: string }>;
 }) {
   const parts: string[] = [];
   parts.push(`NIGHT: ${esc(input.nightName)} (${input.nightOf})`);
@@ -96,6 +97,15 @@ export function buildPrompt(input: {
         .map((a) => `<account nickname="${esc(a.nickname).replace(/"/g, "'")}">\n${esc(a.body).slice(0, LIMITS.accountChars)}\n</account>`)
         .join("\n\n"),
   );
+  if (input.captions?.length) {
+    parts.push(
+      "PHOTO AND VIDEO CAPTIONS (short notes people wrote on their own uploads; use them like accounts, same rules):\n" +
+        input.captions
+          .slice(0, 60)
+          .map((c) => `<caption from="${esc(c.nickname ?? "someone").replace(/"/g, "'")}" kind="${c.kind === "video" ? "video" : "photo"}">${esc(c.caption).slice(0, 200)}</caption>`)
+          .join("\n"),
+    );
+  }
   if (input.previous) {
     parts.push(
       `PREVIOUS DRAFT (version ${input.previous.version}). Rewrite it to address the notes below, keeping what works:\n<draft>\n# ${esc(input.previous.title)}\n${esc(input.previous.dek ?? "")}\n\n${esc(input.previous.body)}\n</draft>`,
