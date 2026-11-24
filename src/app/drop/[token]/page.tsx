@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Markdown } from "@/components/Markdown";
 import { dropContext } from "@/lib/drop-context";
 import { nightByToken } from "@/lib/nights";
 import { cf } from "@/lib/env";
@@ -10,6 +9,8 @@ import { formatDay } from "@/lib/format";
 import { latestDraft, listAlbum, mePass, phaseOf } from "@/lib/nights";
 import { parseVenueJson } from "@/lib/venues";
 import { DropClient } from "./DropClient";
+import { StoryBody } from "@/components/StoryBody";
+import { PHOTO_RE, uploadShortId } from "@/lib/inline-media";
 import { InAppNotice } from "@/components/InAppNotice";
 
 export const dynamic = "force-dynamic";
@@ -159,7 +160,17 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
               }
             : null
         }
-        draftBody={draft && phase !== "dropped" ? <Markdown>{draft.body}</Markdown> : null}
+        draftBody={
+          draft && phase !== "dropped" ? (
+            <StoryBody
+              body={draft.body}
+              re={PHOTO_RE}
+              items={Object.fromEntries(
+                album.filter((u) => u.decision !== "toss").map((u) => [uploadShortId(u.r2_key), { src: `/api/drop/${token}/file/${u.r2_key}`, kind: u.kind, caption: u.caption }]),
+              )}
+            />
+          ) : null
+        }
       />
   );
 

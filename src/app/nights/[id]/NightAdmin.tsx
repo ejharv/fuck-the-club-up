@@ -661,7 +661,7 @@ function DraftPanel({
           <div>
             <label htmlFor="draft-body" className="mb-1 block text-sm font-bold">Body</label>
             <textarea id="draft-body" name="body" required rows={16} maxLength={60000} defaultValue={draft?.body ?? ""} onPaste={linkPaste} className="field leading-relaxed" />
-            <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link.</p>
+            <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link. A line like [[photo:a1b2c3d4]] puts that photo there: move it or delete the line.</p>
             <p className="mt-1 text-sm text-dim">Link a place with [Rick&apos;s](https://its-website.com). Saving makes a new version, and approvals start over.</p>
           </div>
           <div>

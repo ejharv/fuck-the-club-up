@@ -1,4 +1,5 @@
 import "server-only";
+import { MEDIA_RE, PHOTO_RE, cleanMarkers, uploadShortId } from "./inline-media";
 import { collectionStatements } from "./collections";
 import { insertPostStatements, type MediaInsert, type PostFields } from "./post-fields";
 import type { Song } from "./tracks";
@@ -62,15 +63,24 @@ export async function finishDrop(env: CloudflareEnv, nightId: string): Promise<s
   const f = JSON.parse(night.drop_fields) as DropFields;
 
   const { results: files } = await env.DB.prepare(
-    `SELECT copied_key, kind, content_type, caption, is_cover FROM night_uploads
+    `SELECT r2_key, copied_key, kind, content_type, caption, is_cover FROM night_uploads
       WHERE night_id = ? AND decision = 'keep' AND copied_key IS NOT NULL ORDER BY created_at`,
   )
     .bind(nightId)
-    .all<{ copied_key: string; kind: string; content_type: string; caption: string | null; is_cover: number }>();
+    .all<{ r2_key: string; copied_key: string; kind: string; content_type: string; caption: string | null; is_cover: number }>();
   const media: MediaInsert[] = files.map((m) => ({ kind: m.kind, key: m.copied_key, url: null, type: m.content_type, caption: m.caption }));
   const cover = files.find((m) => m.is_cover && m.kind === "photo")?.copied_key ?? files.find((m) => m.kind === "photo")?.copied_key ?? null;
 
-  const insert = insertPostStatements(env.DB, { ...f, nightOf: night.night_of }, media, cover, f.authorEmail);
+  // Media ids are made here so photos placed in the story ([[photo:…]]) can point at them ([[media:…]]).
+  const ids = files.map(() => crypto.randomUUID());
+  const byShort = new Map(files.map((m, i) => [uploadShortId(m.r2_key), ids[i]]));
+  const body = cleanMarkers(
+    f.body.replace(PHOTO_RE, (_m, s: string) => (byShort.has(s) ? `[[media:${byShort.get(s)}]]` : "")),
+    MEDIA_RE,
+    new Set(ids),
+    "media",
+  );
+  const insert = insertPostStatements(env.DB, { ...f, body, nightOf: night.night_of }, media, cover, f.authorEmail, ids);
   const collections = await collectionStatements(env.DB, insert.id, f.venues ?? [], f.songs ?? [], insert.mediaRows);
   await env.DB.batch([
     ...insert.stmts,

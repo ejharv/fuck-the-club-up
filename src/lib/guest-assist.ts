@@ -2,7 +2,7 @@ import "server-only";
 import { converseWithTool } from "./bedrock";
 
 /** Claude help for a guest's account of the night. Small, capped, suggestion-only. */
-export const GUEST_ASSIST = { perDevice: 5, perNight: 100, maxChars: 4000 };
+export const GUEST_ASSIST = { perDevice: 5, perNight: 100, maxChars: 10000 };
 
 export const GUEST_MODES = {
   polish: "Fix typos, grammar and punctuation only. Keep their words, jokes, facts and length.",
@@ -34,7 +34,7 @@ const TOOL = {
 
 export async function guestAssist(env: CloudflareEnv, mode: GuestMode, text: string) {
   const user = `TASK: ${GUEST_MODES[mode]}\n\n<story>\n${text.replace(/<\/?story\b[^>]*>/gi, "").slice(0, GUEST_ASSIST.maxChars)}\n</story>\n\nRespond with the suggest tool.`;
-  const { input } = await converseWithTool<{ text?: unknown; heads_up?: unknown }>(env, { system: SYSTEM, user, tool: TOOL, maxTokens: 1200 });
+  const { input } = await converseWithTool<{ text?: unknown; heads_up?: unknown }>(env, { system: SYSTEM, user, tool: TOOL, maxTokens: 3500 });
   const out = typeof input.text === "string" ? input.text.trim().replace(/<[^>]+>/g, "").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").slice(0, GUEST_ASSIST.maxChars) : "";
   const headsUp = Array.isArray(input.heads_up) ? input.heads_up.filter((x): x is string => typeof x === "string").slice(0, 2).map((x) => x.slice(0, 200)) : [];
   return { text: out, headsUp };

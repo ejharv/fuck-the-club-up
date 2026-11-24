@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Markdown } from "@/components/Markdown";
+import { StoryBody } from "@/components/StoryBody";
+import { PHOTO_RE, uploadShortId } from "@/lib/inline-media";
 import { decryptText } from "@/lib/crypto";
 import { mePass } from "@/lib/nights";
 import { mediaUrl } from "@/lib/media-url";
@@ -124,7 +125,20 @@ export default async function NightAdminPage({
         guestSongs={guestSongs.results}
         guestPlaces={guestPlaces.results}
         draft={draft}
-        draftBody={draft ? <Markdown>{draft.body}</Markdown> : null}
+        draftBody={
+          draft ? (
+            <StoryBody
+              body={draft.body}
+              re={PHOTO_RE}
+              items={Object.fromEntries(
+                uploads.results.map((u) => [
+                  uploadShortId(u.r2_key),
+                  { src: `/api/nights/${id}/file/${u.r2_key}`, kind: u.kind, caption: u.caption, credit: u.decision === "toss" ? "tossed: won't be in the post" : u.decision === "keep" ? null : "not kept yet" },
+                ]),
+              )}
+            />
+          ) : null
+        }
         review={review}
         venues={parseVenues(night.venues)}
       />

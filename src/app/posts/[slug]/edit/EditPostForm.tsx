@@ -151,7 +151,7 @@ export function EditPostForm({
       <div>
         <label htmlFor="body" className="mb-2 block font-bold">The story</label>
         <textarea id="body" name="body" required rows={14} maxLength={60000} defaultValue={post.body} onPaste={linkPaste} className="field leading-relaxed" />
-        <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link.</p>
+        <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link. A line like [[media:…]] is a photo placed in the story: move it or delete the line (deleting it moves the photo to the gallery).</p>
       </div>
 
       {items.length > 0 && (

@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { deleteMedia, deletePost } from "@/app/actions";
-import { Markdown } from "@/components/Markdown";
+import { StoryBody } from "@/components/StoryBody";
+import { MEDIA_RE } from "@/lib/inline-media";
 import { PlaceholderBadge } from "@/components/PostCard";
 import { Wristband } from "@/components/Wristband";
 import { getPost, type MediaRow } from "@/lib/db";
@@ -108,7 +109,15 @@ export default async function PostPage({ params }: Props) {
   const section = sectionBySlug(post.section);
   const canEdit = Boolean(member && (member.email === post.author_email || member.role === "admin"));
   // Photos sit in a 2-up grid; with an odd count the first one runs full width so nothing is left hanging.
-  const photos = media.filter((m) => m.kind === "photo" && m.r2_key);
+  // Photos placed in the story render inline; the gallery shows the rest.
+  const placed = new Set([...post.body.matchAll(new RegExp(MEDIA_RE.source, "g"))].map((m) => m[1].toLowerCase()));
+  const inline = Object.fromEntries(
+    media
+      .filter((m) => placed.has(m.id) && m.r2_key && (m.kind === "photo" || m.kind === "video"))
+      .map((m) => [m.id, { src: mediaUrl(m.r2_key!, env.MEDIA_PUBLIC_URL), kind: m.kind, caption: m.caption }]),
+  );
+  const gallery = media.filter((m) => !inline[m.id]);
+  const photos = gallery.filter((m) => m.kind === "photo" && m.r2_key);
   const loneLeadPhoto = photos.length % 2 === 1 ? photos[0].id : null;
 
   return (
@@ -138,7 +147,7 @@ export default async function PostPage({ params }: Props) {
       </div>
 
       <div className="mt-10">
-        <Markdown>{post.body}</Markdown>
+        <StoryBody body={post.body} re={MEDIA_RE} items={inline} />
       </div>
 
       {(venues.length > 0 || songs.length > 0) && (
@@ -186,9 +195,9 @@ export default async function PostPage({ params }: Props) {
         </div>
       )}
 
-      {media.length > 0 && (
+      {gallery.length > 0 && (
         <section id="media" aria-label="Photos, videos and music" className="mt-12 grid max-w-4xl grid-cols-2 gap-x-2 gap-y-4 sm:mt-16 sm:gap-x-4 sm:gap-y-6">
-          {media.map((m) => (
+          {gallery.map((m) => (
             <MediaBlock key={m.id} item={m} base={env.MEDIA_PUBLIC_URL} canEdit={canEdit} wide={m.id === loneLeadPhoto} />
           ))}
         </section>

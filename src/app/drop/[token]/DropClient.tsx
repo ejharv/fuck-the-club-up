@@ -848,7 +848,7 @@ function Account({ token, account, defaultName, count }: { token: string; accoun
         onChange={(e) => setBody(e.target.value)}
         onBlur={() => save(false)}
         rows={6}
-        maxLength={4000}
+        maxLength={10000}
         className="field mt-2 leading-relaxed"
         placeholder="We got there at 10:40, which everyone agreed was too early…"
       />
@@ -856,7 +856,7 @@ function Account({ token, account, defaultName, count }: { token: string; accoun
         <p role="status" aria-live="polite" className={`min-w-0 ${color}`}>
           {status.kind === "saving" ? "Saving…" : status.text ?? "Saves automatically as you type."}
         </p>
-        <p className="shrink-0 text-dim">{body.length} / 4000</p>
+        <p className="shrink-0 text-dim">{body.length.toLocaleString()} / 10,000</p>
       </div>
       <GuestClaude token={token} text={body} onUse={setBody} />
       <button type="button" disabled={status.kind === "saving"} onClick={() => save(true)} className={`${BTN_PRIMARY} mt-2 w-full sm:w-auto`}>

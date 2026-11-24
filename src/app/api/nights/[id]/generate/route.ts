@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { PHOTO_RE, cleanMarkers, uploadShortId } from "@/lib/inline-media";
 import { BedrockError } from "@/lib/bedrock";
 import { cf } from "@/lib/env";
 import { getNight, latestDraft, parseVenues } from "@/lib/nights";
@@ -55,9 +56,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     )
       .bind(id)
       .all<{ nickname: string | null; kind: string; caption: string }>();
-    const prompt = buildPrompt({ nightName: night.name, nightOf: night.night_of, accounts, venues, previous, notes, captions });
+    const { results: files } = await env.DB.prepare(
+      "SELECT r2_key, kind, nickname, caption, created_at FROM night_uploads WHERE night_id = ? AND uploaded = 1 AND decision != 'toss' AND kind IN ('photo', 'video') ORDER BY created_at LIMIT 40",
+    )
+      .bind(id)
+      .all<{ r2_key: string; kind: string; nickname: string | null; caption: string | null; created_at: string }>();
+    const photos = files.map((f) => ({
+      id: uploadShortId(f.r2_key),
+      kind: f.kind,
+      nickname: f.nickname,
+      caption: f.caption,
+      at: new Date(f.created_at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/Detroit" }),
+    }));
+    const prompt = buildPrompt({ nightName: night.name, nightOf: night.night_of, accounts, venues, previous, notes, captions, photos });
     const out = await writeDraft(env, prompt);
-    const body = sanitizeDraftBody(out.body, new Set(venues.map((v) => v.url).filter((u): u is string => Boolean(u))));
+    const body = cleanMarkers(
+      sanitizeDraftBody(out.body, new Set(venues.map((v) => v.url).filter((u): u is string => Boolean(u)))),
+      PHOTO_RE,
+      new Set(photos.map((p) => p.id)),
+      "photo",
+    );
     const version = (previous?.version ?? (await latestDraft(id))?.version ?? 0) + 1;
     await env.DB.prepare(
       `INSERT INTO night_drafts (night_id, version, title, dek, night_label, damage, ride_home, body, songs, source, created_at)

@@ -95,11 +95,12 @@ export function insertPostStatements(
   media: MediaInsert[],
   coverKey: string | null,
   authorEmail: string,
+  ids?: string[],
 ) {
   const id = crypto.randomUUID();
   const slug = slugify(f.title);
   const now = new Date().toISOString();
-  const mediaRows = media.map((m) => ({ id: crypto.randomUUID(), kind: m.kind, url: m.url, caption: m.caption }));
+  const mediaRows = media.map((m, i) => ({ id: ids?.[i] ?? crypto.randomUUID(), kind: m.kind, url: m.url, caption: m.caption }));
   const stmts = [
     DB.prepare(
       `INSERT INTO posts (id, slug, title, dek, section, night, night_of, damage, ride_home, body, cover_key,
