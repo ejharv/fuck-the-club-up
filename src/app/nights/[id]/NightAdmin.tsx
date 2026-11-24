@@ -2,13 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
-import { useEffect, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import type { Draft, NightStatus, Phase } from "@/lib/nights";
 import { HOUSE_RULES } from "@/lib/sections";
 import { InviteCard } from "@/components/InviteCard";
 import { InviteEditor, type InviteData } from "@/components/InviteEditor";
 import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
 import { linkPaste } from "@/lib/link-paste";
+import { useFormDraft } from "@/lib/use-form-draft";
+import { DraftRestore, DraftSavedNote } from "@/components/DraftRestore";
 import { songsFromLines, songsToLines, type Song } from "@/lib/tracks";
 import type { Venue } from "@/lib/venues";
 import {
@@ -551,6 +553,17 @@ function DraftPanel({
   const [busy, setBusy] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const editForm = useRef<HTMLFormElement>(null);
+  const draftKey = `ftcu-nightdraft:${nightId}:v${draft?.version ?? 0}`;
+  const local = useFormDraft({ key: draftKey, form: editForm, extra: null, active: editing });
+  // Unsaved edits from last time: open the editor so the restore prompt shows.
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(draftKey)) setEditing(true);
+    } catch {
+      // ignore
+    }
+  }, [draftKey]);
   const [note, setNote] = useState("");
   const { pending, error, run } = useRun();
   const draftSongs: Song[] = (() => {
@@ -585,7 +598,10 @@ function DraftPanel({
         body: String(form.get("body") ?? ""),
         songs: songsFromLines(String(form.get("songs") ?? "")),
       }),
-      () => setEditing(false),
+      () => {
+        local.clear();
+        setEditing(false);
+      },
     );
   }
 
@@ -617,7 +633,9 @@ function DraftPanel({
       <ErrorLine error={genError} />
 
       {editing ? (
-        <form action={saveEdit} className="mt-6 space-y-4">
+        <form ref={editForm} action={saveEdit} className="mt-6 space-y-4">
+          {local.pending && <DraftRestore savedAt={local.pending.savedAt} onRestore={local.restore} onDiscard={local.discard} />}
+          <DraftSavedNote savedAt={local.savedAt} />
           <div>
             <label htmlFor="draft-title" className="mb-1 block text-sm font-bold">Title</label>
             <input id="draft-title" name="title" required maxLength={140} defaultValue={draft?.title ?? ""} placeholder="Title" className="field text-xl" />

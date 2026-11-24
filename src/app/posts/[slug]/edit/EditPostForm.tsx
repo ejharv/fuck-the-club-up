@@ -9,6 +9,8 @@ import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEdit
 import { MAX_FILES_PER_POST } from "@/lib/media-rules";
 import { HOUSE_RULES } from "@/lib/sections";
 import { linkPaste } from "@/lib/link-paste";
+import { useFormDraft } from "@/lib/use-form-draft";
+import { DraftRestore, DraftSavedNote } from "@/components/DraftRestore";
 import { songsToLines } from "@/lib/tracks";
 
 type Fields = {
@@ -63,12 +65,23 @@ export function EditPostForm({
   const addFromPhone = useCallback((fresh: PickedItem[]) => setAdding((l) => [...l, ...fresh]), []);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const draft = useFormDraft({
+    key: `ftcu-editpost:${post.id}`,
+    form,
+    extra: { venues, songs },
+    setExtra: (e) => {
+      if (Array.isArray(e?.venues) && e.venues.length) setVenues(e.venues);
+      if (typeof e?.songs === "string") setSongs(e.songs);
+    },
+  });
 
   function submit(form: FormData) {
     setError(null);
     if (uploading) return setError("Wait for the uploads to finish.");
     if (pickerFailed(adding)) return setError("Remove the files that didn't upload, then save.");
+    draft.saveNow();
     startTransition(async () => {
+      draft.clear();
       const result = await updatePost({
         id: post.id,
         title: String(form.get("title") ?? ""),
@@ -88,12 +101,16 @@ export function EditPostForm({
         venues,
         songsText: songs,
       });
-      if (result?.error) setError(result.error);
+      if (result?.error) {
+        setError(result.error);
+        draft.resume();
+      }
     });
   }
 
   return (
     <form ref={form} action={submit} className="mt-8 space-y-7">
+      {draft.pending && <DraftRestore savedAt={draft.pending.savedAt} onRestore={draft.restore} onDiscard={draft.discard} />}
       <ClaudeAssist
         getFields={getFields}
         venues={venues.filter((v) => v.name).map((v) => ({ name: v.name, url: v.url }))}
@@ -220,6 +237,8 @@ export function EditPostForm({
       </label>
 
       {error && <p role="alert" className="rounded-md border border-pink/60 bg-pink/10 p-4">{error}</p>}
+
+      <DraftSavedNote savedAt={draft.savedAt} />
 
       <div className="sticky bottom-0 z-20 -mx-4 border-t border-line bg-night/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:px-6">
         <button disabled={pending || uploading} className="min-h-14 w-full rounded-full bg-maize px-8 text-lg font-bold text-night hover:bg-ink disabled:opacity-60 sm:w-auto">
