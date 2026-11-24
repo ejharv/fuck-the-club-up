@@ -15,7 +15,7 @@ const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["lati
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: { default: "Fuck The Club Up", template: "%s | Fuck The Club Up" },
-  description: "Going out in Ann Arbor: the nights, the places, and the stories that turned into lore.",
+  description: "Going out: the nights, the places, and the stories that turned into lore.",
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -30,29 +30,29 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <a href="#main" className="mono sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:bg-maize focus:px-3 focus:py-2 focus:text-night">
           Skip to content
         </a>
-        <header className="mx-auto max-w-6xl px-4 pt-5 sm:px-6">
-          <div className="flex items-center justify-between gap-4">
-            <Link href="/" className="display text-xl sm:text-2xl">
+        <header className="mx-auto max-w-6xl px-[max(1rem,env(safe-area-inset-left))] pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6 sm:pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 sm:gap-x-4">
+            <Link href="/" className="display -my-2 shrink-0 whitespace-nowrap py-3 text-[1.15rem] min-[400px]:text-xl sm:text-2xl">
               Fuck The <span className="text-maize">Club</span> Up
             </Link>
-            <div className="mono flex items-center gap-4">
+            <div className={`mono hdr-actions -mr-2 flex flex-wrap items-center gap-x-1 gap-y-1 sm:gap-x-2 ${member ? "-ml-2 w-[calc(100%+1rem)] justify-between sm:ml-0 sm:w-auto sm:justify-end" : ""}`}>
               {member ? (
                 <>
-                  <Link href="/new" className="rounded-sm bg-maize px-3 py-2 text-night hover:bg-ink">
+                  <Link href="/new" className="ml-2 inline-flex min-h-11 items-center rounded-sm bg-maize px-3 text-night hover:bg-ink sm:ml-0 sm:mr-1">
                     New post
                   </Link>
                   {member.role === "admin" && (
                     <>
-                      <Link href="/nights" className="hover:text-maize">
+                      <Link href="/nights" className="tap hover:text-maize">
                         Nights
                       </Link>
-                      <Link href="/crew" className="hidden hover:text-maize sm:inline">
+                      <Link href="/crew" className="tap hidden hover:text-maize sm:inline-flex">
                         Crew
                       </Link>
-                      <Link href="/site" className="hidden hover:text-maize sm:inline">
+                      <Link href="/site" className="tap hidden hover:text-maize sm:inline-flex">
                         Site
                       </Link>
-                      <Link href="/takedowns" className="hover:text-maize">
+                      <Link href="/takedowns" className="tap hover:text-maize">
                         Takedowns
                         {openTakedowns > 0 && (
                           <span className="ml-1 rounded-full bg-pink px-1.5 text-night" aria-label={`${openTakedowns} open`}>
@@ -63,27 +63,27 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                     </>
                   )}
                   <form action={signOutAction}>
-                    <button className="uppercase tracking-[inherit] text-dim hover:text-ink">Sign out</button>
+                    <button className="tap uppercase tracking-[inherit] text-dim hover:text-ink">Sign out</button>
                   </form>
                 </>
               ) : (
-                <Link href="/login" className="text-dim hover:text-ink">
+                <Link href="/login" className="tap text-dim hover:text-ink">
                   Crew sign in
                 </Link>
               )}
             </div>
           </div>
-          <nav aria-label="Sections" className="mono -mx-4 mt-4 overflow-x-auto px-4 pb-3 sm:mx-0 sm:px-0">
-            <ul className="flex gap-5 whitespace-nowrap text-dim">
+          <nav aria-label="Sections" className="mono mt-1 pb-1 sm:mt-2">
+            <ul className="-mx-2 flex flex-wrap text-dim">
               {SECTIONS.map((s) => (
                 <li key={s.slug}>
-                  <Link href={`/section/${s.slug}`} className="hover:text-maize">
+                  <Link href={`/section/${s.slug}`} className="tap whitespace-nowrap hover:text-maize">
                     {s.name}
                   </Link>
                 </li>
               ))}
               <li>
-                <Link href="/about" className="hover:text-maize">
+                <Link href="/about" className="tap whitespace-nowrap hover:text-maize">
                   About
                 </Link>
               </li>
@@ -92,12 +92,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         </header>
         <div className="light-strip" aria-hidden />
         <main id="main">{children}</main>
-        <footer className="mx-auto mt-24 max-w-6xl border-t border-line px-4 py-8 sm:px-6">
-          {content.footerLine && <p className="text-dim">{content.footerLine}</p>}
+        <footer className="mx-auto mt-20 max-w-6xl border-t border-line px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-8 sm:mt-28 sm:px-6">
+          {content.footerLine && <p className="max-w-[60ch] text-dim">{content.footerLine}</p>}
           {content.footerRules && <p className="mono mt-3 text-maize">{content.footerRules}</p>}
-          <p className="mono mt-4 flex gap-5 text-dim">
-            <Link href="/privacy" className="hover:text-ink">Privacy</Link>
-            <Link href="/terms" className="hover:text-ink">Terms</Link>
+          <p className="mono -mx-2 mt-3 flex text-dim">
+            <Link href="/privacy" className="tap hover:text-ink">Privacy</Link>
+            <Link href="/terms" className="tap hover:text-ink">Terms</Link>
           </p>
         </footer>
       </body>

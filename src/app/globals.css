@@ -36,6 +36,13 @@ body {
   font-size: 17px;
   line-height: 1.6;
   min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-padding-top: 1rem;
 }
 
 /* Display: Bowlby One, uppercase, tight. */
@@ -45,6 +52,9 @@ body {
   line-height: 0.9;
   letter-spacing: 0.005em;
   text-wrap: balance;
+  /* A single long word in Bowlby One can be wider than a phone: break it rather than scroll the page. */
+  overflow-wrap: break-word;
+  hyphens: manual;
 }
 
 /* Utility: small mono caps with tracking (nav, tags, kickers, wristband). */
@@ -54,6 +64,24 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   line-height: 1.4;
+}
+
+/* Small inline links/buttons (nav, footer, header actions): keep the visual
+   size small but give them a 44px tap target. Layered so utilities such as
+   `hidden` or `px-0` still win. */
+@layer components {
+  .tap {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding-inline: 0.5rem;
+  }
+}
+
+/* Header actions (crew/admin links) squeeze onto one row on phones. */
+@media (max-width: 639px) {
+  .hdr-actions { letter-spacing: 0.06em; }
+  .hdr-actions .tap { padding-inline: 0.4rem; }
 }
 
 .outlined {
@@ -87,7 +115,8 @@ body {
 .flyer:focus-within {
   border-color: var(--maize);
 }
-@media (prefers-reduced-motion: no-preference) {
+/* Only tilt where hover is real: on touch screens :hover sticks after a tap. */
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
   .flyer:hover,
   .flyer:focus-within {
     transform: rotate(-0.6deg);
@@ -97,6 +126,7 @@ body {
 /* Post body */
 .prose-night {
   max-width: 65ch;
+  overflow-wrap: break-word;
 }
 .prose-night > * + * { margin-top: 1.1em; }
 .prose-night h2,
@@ -106,9 +136,10 @@ body {
   line-height: 0.95;
   margin-top: 1.8em;
 }
-.prose-night h2 { font-size: 1.75rem; }
+.prose-night h2 { font-size: clamp(1.5rem, 5vw, 1.85rem); }
 .prose-night h3 { font-size: 1.3rem; }
-.prose-night a { color: var(--maize); text-decoration: underline; text-underline-offset: 3px; }
+.prose-night a { color: var(--maize); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.prose-night a:hover { text-decoration-thickness: 2px; }
 .prose-night strong { color: #fff; }
 .prose-night em { color: var(--ink); }
 .prose-night blockquote {

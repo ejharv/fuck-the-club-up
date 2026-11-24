@@ -23,11 +23,11 @@ export default async function SectionPage({ params }: Props) {
   const [posts, env, content] = await Promise.all([listPosts({ section: section.slug }), cf(), getSiteContent()]);
 
   return (
-    <section className="mx-auto max-w-6xl px-4 pt-14 sm:px-6">
+    <section className="mx-auto max-w-6xl px-4 pt-10 sm:px-6 sm:pt-14">
       <p className="mono text-pink">Section</p>
-      <h1 className="display mt-4 text-[clamp(3rem,10vw,7rem)] text-maize">{section.name}</h1>
-      <p className="mt-5 max-w-xl text-xl">{content.sectionBlurbs[section.slug] ?? section.blurb}</p>
-      <div className="mt-12">
+      <h1 className="display mt-3 text-[clamp(2.75rem,12vw,7rem)] text-maize sm:mt-4">{section.name}</h1>
+      <p className="mt-4 max-w-xl text-lg leading-snug sm:mt-5 sm:text-xl">{content.sectionBlurbs[section.slug] ?? section.blurb}</p>
+      <div className="mt-10 sm:mt-12">
         {posts.length ? (
           <PostGrid posts={posts} mediaBase={env.MEDIA_PUBLIC_URL} />
         ) : (

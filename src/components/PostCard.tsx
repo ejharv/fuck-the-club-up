@@ -17,7 +17,7 @@ export function PostCard({ post, mediaBase }: { post: PostRow; mediaBase: string
         // eslint-disable-next-line @next/next/no-img-element
         <img src={mediaUrl(post.cover_key, mediaBase)} alt="" loading="lazy" className="aspect-[3/2] w-full object-cover" />
       )}
-      <div className="flex flex-1 flex-col gap-3 p-5">
+      <div className="flex flex-1 flex-col gap-2.5 p-4 sm:gap-3 sm:p-5">
         <p className="mono flex flex-wrap items-center gap-x-3 gap-y-1 text-maize">
           <span>{section?.name ?? post.section}</span>
           <span className="text-dim">{post.night_of ? formatDay(post.night_of) : formatDate(post.published_at)}</span>
@@ -26,12 +26,12 @@ export function PostCard({ post, mediaBase }: { post: PostRow; mediaBase: string
           )}
           {post.placeholder ? <PlaceholderBadge /> : null}
         </p>
-        <h3 className="display text-2xl sm:text-[1.7rem]">
+        <h3 className="display text-[1.6rem] sm:text-[1.7rem]">
           <Link href={`/posts/${post.slug}`} className="after:absolute after:inset-0">
             {post.title}
           </Link>
         </h3>
-        {post.dek && <p className="text-dim">{post.dek}</p>}
+        {post.dek && <p className="leading-snug text-dim">{post.dek}</p>}
       </div>
     </article>
   );
@@ -39,7 +39,7 @@ export function PostCard({ post, mediaBase }: { post: PostRow; mediaBase: string
 
 export function PostGrid({ posts, mediaBase }: { posts: PostRow[]; mediaBase: string | undefined }) {
   return (
-    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3">
       {posts.map((p) => (
         <PostCard key={p.id} post={p} mediaBase={mediaBase} />
       ))}
