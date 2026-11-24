@@ -88,6 +88,18 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   }
 
   const myRsvp = rsvps.results.find((r) => r.device_id === device) ?? null;
+  const pickable = night.album_open
+    ? album
+    : device
+      ? (
+          await DB.prepare("SELECT r2_key, kind, caption, decision FROM night_uploads WHERE night_id = ? AND device_id = ? AND uploaded = 1 ORDER BY created_at")
+            .bind(night.id, device)
+            .all<{ r2_key: string; kind: string; caption: string | null; decision: string }>()
+        ).results
+      : [];
+  const storyPhotos = pickable
+    .filter((u) => (u.kind === "photo" || u.kind === "video") && u.decision !== "toss")
+    .map((u) => ({ marker: `photo:${uploadShortId(u.r2_key)}`, src: `/api/drop/${token}/file/${u.r2_key}`, kind: u.kind, caption: u.caption }));
   const songRows = await DB.prepare("SELECT id, device_id, title, artist, url FROM night_songs WHERE night_id = ? ORDER BY created_at")
     .bind(night.id)
     .all<{ id: string; device_id: string; title: string; artist: string | null; url: string | null }>();
@@ -144,6 +156,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         emailHint={myEmail?.email_hint ?? null}
         nightName={night.name}
         songs={songs}
+        storyPhotos={storyPhotos}
         places={places}
         accountCount={accountCount?.n ?? 0}
         album={album.map((u) => ({ key: u.r2_key, kind: u.kind, nickname: u.nickname, caption: u.caption, mine: Boolean(device) && u.device_id === device }))}

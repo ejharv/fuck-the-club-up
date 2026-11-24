@@ -106,6 +106,9 @@ export function RichStory({
   photos = [],
   placeholder,
   minHeight = "16rem",
+  value,
+  onChange,
+  onBlur,
 }: {
   name: string;
   id?: string;
@@ -113,11 +116,21 @@ export function RichStory({
   photos?: StoryPhoto[];
   placeholder?: string;
   minHeight?: string;
+  /** Controlled mode: the parent owns the Markdown. */
+  value?: string;
+  onChange?: (markdown: string) => void;
+  onBlur?: () => void;
 }) {
   const hidden = useRef<HTMLTextAreaElement>(null);
   const internal = useRef(false);
   const [picking, setPicking] = useState(false);
   const lookup = new Map(photos.map((p) => [p.marker, p]));
+  const onChangeRef = useRef(onChange);
+  const onBlurRef = useRef(onBlur);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onBlurRef.current = onBlur;
+  });
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -143,7 +156,9 @@ export function RichStory({
         role: "textbox",
       },
     },
+    onBlur: () => onBlurRef.current?.(),
     onUpdate: ({ editor }) => {
+      onChangeRef.current?.(editor.getMarkdown());
       const el = hidden.current;
       if (!el) return;
       el.value = editor.getMarkdown();
@@ -152,6 +167,12 @@ export function RichStory({
       internal.current = false;
     },
   });
+
+  // Controlled mode: the parent replaced the text (restore, writing help).
+  useEffect(() => {
+    if (!editor || value === undefined) return;
+    if (value !== editor.getMarkdown()) editor.commands.setContent(value, { contentType: "markdown", emitUpdate: false });
+  }, [editor, value]);
 
   // Someone set the text from outside (writing help, restoring autosave): load it.
   useEffect(() => {

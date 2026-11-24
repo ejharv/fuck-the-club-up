@@ -521,7 +521,7 @@ function AccountsPanel({ nightId, accounts, rsvps }: { nightId: string; accounts
                 <span className="mono text-maize">{a.nickname}</span>
                 <button type="button" disabled={pending} onClick={() => confirm(`Remove ${a.nickname}'s story?`) && run(() => removeAccount(nightId, a.device_id))} className={`${textBtn} -mr-2`}>Remove</button>
               </div>
-              <p className="mt-2 whitespace-pre-line">{a.body}</p>
+              <p className="mt-2 whitespace-pre-line">{a.body.replace(/\[\[photo:[0-9a-f]{8}\]\]/g, "[photo]")}</p>
             </li>
           ))}
         </ul>

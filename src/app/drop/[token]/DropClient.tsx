@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { soundcloudSearch, spotifySearch } from "@/lib/tracks";
+import { RichStory, type StoryPhoto } from "@/components/RichStory";
 import { browserEnv, browserName, openOutHref, type BrowserEnv } from "@/lib/in-app";
 import { linkDomain, type Venue } from "@/lib/venues";
 import { addNote, rsvp, saveAccount, setApproval, addGuestSongs, addGuestSongPick, removeGuestSong, addGuestPlace, removeGuestPlace, setUploadCaption, setGuestEmail, removeGuestEmail } from "@/app/drop/actions";
@@ -733,7 +734,7 @@ function Uploader({ token }: { token: string }) {
  * type (so a closed tab or a Snapchat reload never loses it) and to the
  * server a couple of seconds after they stop typing.
  */
-function Account({ token, account, defaultName, count }: { token: string; account: { nickname: string; body: string } | null; defaultName: string; count: number }) {
+function Account({ token, account, defaultName, count, photos }: { token: string; account: { nickname: string; body: string } | null; defaultName: string; count: number; photos: StoryPhoto[] }) {
   const key = `ftcu-story:${token}`;
   const [nickname, setNickname] = useState(account?.nickname ?? defaultName);
   const [body, setBody] = useState(account?.body ?? "");
@@ -842,16 +843,21 @@ function Account({ token, account, defaultName, count }: { token: string; accoun
         placeholder="The only name that shows up"
       />
       <label htmlFor="acct-body" className="mt-4 block font-bold">The night, according to you</label>
-      <textarea
-        id="acct-body"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        onBlur={() => save(false)}
-        rows={6}
-        maxLength={10000}
-        className="field mt-2 leading-relaxed"
-        placeholder="We got there at 10:40, which everyone agreed was too early…"
-      />
+      <div className="mt-2">
+        <RichStory
+          name="story"
+          id="acct-body"
+          defaultValue={body}
+          value={body}
+          onChange={setBody}
+          onBlur={() => save(false)}
+          minHeight="10rem"
+          photos={photos}
+          placeholder="We got there at 10:40, which everyone agreed was too early…"
+        />
+      </div>
+      {photos.length > 0 && <p className="mt-1 text-xs text-dim">Tap <strong>+ Add photo here</strong> to put a photo right where it happened in your story.</p>}
+      {body.length > 10000 && <p role="alert" className="mt-1 text-sm text-pink">That&apos;s over 10,000 characters. Trim it a bit and it&apos;ll save.</p>}
       <div className="mt-1 flex items-start justify-between gap-3 text-xs">
         <p role="status" aria-live="polite" className={`min-w-0 ${color}`}>
           {status.kind === "saving" ? "Saving…" : status.text ?? "Saves automatically as you type."}
@@ -1083,6 +1089,7 @@ export function DropClient(props: {
   places: { approved: Venue[]; mine: Array<{ id: string; name: string; url: string | null; kind: string }> };
   accountCount: number;
   album: AlbumItem[];
+  storyPhotos: StoryPhoto[];
   draft: Draft | null;
   draftBody: ReactNode;
 }) {
@@ -1111,7 +1118,7 @@ export function DropClient(props: {
       {verified && phase !== "invite" && <JumpNav links={jump} />}
       {verified && phase === "live" && <Uploader token={token} />}
       {showDraft && draftFirst && review}
-      {showAccount && <Account token={token} account={props.account} defaultName={props.rsvp?.nickname ?? ""} count={props.accountCount} />}
+      {showAccount && <Account token={token} account={props.account} defaultName={props.rsvp?.nickname ?? ""} count={props.accountCount} photos={props.storyPhotos} />}
       {showDraft && !draftFirst && review}
       {phase !== "invite" && <Album token={token} items={props.album} canCaption={verified && canAct} />}
       {/* Room so the sticky upload bar never covers the last thing on the page. */}
