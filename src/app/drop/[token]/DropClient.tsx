@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useTransition, type ReactNode } from "reac
 import { soundcloudSearch, spotifySearch } from "@/lib/tracks";
 import { browserEnv, browserName, openOutHref, type BrowserEnv } from "@/lib/in-app";
 import { linkDomain, type Venue } from "@/lib/venues";
-import { addNote, rsvp, saveAccount, setApproval, addGuestSongs, removeGuestSong, addGuestPlace, removeGuestPlace } from "@/app/drop/actions";
+import { addNote, rsvp, saveAccount, setApproval, addGuestSongs, addGuestSongPick, removeGuestSong, addGuestPlace, removeGuestPlace } from "@/app/drop/actions";
 import { ACCEPT_ATTR, ALLOWED_TYPES } from "@/lib/media-rules";
 import type { Phase } from "@/lib/nights";
 import { putWithProgress, scrubPhoto } from "@/lib/scrub-photo";
@@ -300,40 +300,106 @@ type GuestSong = { id: string; title: string; artist: string | null; mine: boole
 
 /** Guests type songs for the night's playlist; the Spotify/SoundCloud links are built here, never typed. */
 function GuestSongs({ token, songs }: { token: string; songs: GuestSong[] }) {
-  const [text, setText] = useState("");
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<Array<{ title: string; artist: string; art: string | null }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [searched, setSearched] = useState("");
   const { pending, msg, run } = useAction();
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) {
+      setHits([]);
+      setSearched("");
+      return;
+    }
+    const ctl = new AbortController();
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/drop/${token}/song-search?q=${encodeURIComponent(term)}`, { signal: ctl.signal });
+        const d = (await res.json().catch(() => ({}))) as { results?: Array<{ title: string; artist: string; art: string | null }> };
+        setHits(d.results ?? []);
+        setSearched(term);
+      } catch {
+        // aborted or offline: keep what's there
+      } finally {
+        setSearching(false);
+      }
+    }, 350);
+    return () => {
+      clearTimeout(t);
+      ctl.abort();
+    };
+  }, [q, token]);
+  const pick = (title: string, artist: string) =>
+    run(async () => {
+      const r = await addGuestSongPick(token, title, artist);
+      if (r && "ok" in r) {
+        setQ("");
+        setHits([]);
+      }
+      return r;
+    }, `Added ${title}.`);
+  const typed = () =>
+    run(async () => {
+      const r = await addGuestSongs(token, q);
+      if (r && "ok" in r) {
+        setQ("");
+        setHits([]);
+      }
+      return r;
+    }, "Added.");
   return (
     <section id="songs" aria-labelledby="songs-h" className="mt-10 scroll-mt-4">
       <h2 id="songs-h" className="display text-3xl">Songs of the night</h2>
-      <p className="mt-2 text-dim">
-        Type what played: <strong className="text-ink">Artist - Song</strong>. Each one gets Spotify and SoundCloud buttons, and they end up on the post&apos;s playlist.
-      </p>
-      <form
-        className="mt-3 flex flex-col gap-2 sm:flex-row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          run(async () => {
-            const r = await addGuestSongs(token, text);
-            if (r && "ok" in r) setText("");
-            return r;
-          }, "Added.");
-        }}
-      >
-        <label htmlFor="song-in" className="sr-only">Artist - Song</label>
+      <p className="mt-2 text-dim">Search what played and tap it. They end up on the post&apos;s playlist with Spotify and SoundCloud buttons.</p>
+      <div className="mt-3">
+        <label htmlFor="song-in" className="sr-only">Search for a song</label>
         <input
           id="song-in"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="The Killers - Mr. Brightside"
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (hits[0]) pick(hits[0].title, hits[0].artist);
+            }
+          }}
+          placeholder="Search a song or artist"
           autoComplete="off"
-          enterKeyHint="send"
-          maxLength={200}
-          className="field sm:flex-1"
+          enterKeyHint="search"
+          maxLength={80}
+          className="field"
         />
-        <button disabled={pending || !text.trim()} className="min-h-12 rounded-full bg-maize px-6 font-bold text-night hover:bg-ink disabled:opacity-60">
-          {pending ? "Adding…" : "Add song"}
-        </button>
-      </form>
+        {searching && <p className="mt-2 text-sm text-dim">Searching…</p>}
+        {hits.length > 0 && (
+          <ul className="mt-2 divide-y divide-line overflow-hidden rounded border border-line" aria-label="Results">
+            {hits.map((h) => (
+              <li key={`${h.artist}|${h.title}`}>
+                <button type="button" disabled={pending} onClick={() => pick(h.title, h.artist)} className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-left hover:bg-night-2 disabled:opacity-60">
+                  {h.art ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={h.art} alt="" width={44} height={44} className="h-11 w-11 shrink-0 rounded-sm object-cover" loading="lazy" referrerPolicy="no-referrer" />
+                  ) : (
+                    <span className="h-11 w-11 shrink-0 rounded-sm bg-night-2" />
+                  )}
+                  <span className="min-w-0">
+                    <strong className="block truncate">{h.title}</strong>
+                    <span className="block truncate text-sm text-dim">{h.artist}</span>
+                  </span>
+                  <span className="mono ml-auto shrink-0 text-maize">Add</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {!searching && searched && searched === q.trim() && (
+          <button type="button" disabled={pending} onClick={typed} className="mt-2 inline-flex min-h-11 items-center text-sm text-dim underline underline-offset-4 hover:text-maize">
+            {hits.length ? `Not there? Add "${q.trim()}" as typed` : `No matches. Add "${q.trim()}" as typed`}
+          </button>
+        )}
+      </div>
       {msg && <p role="status" className={`mt-2 text-sm ${msg.ok ? "text-maize" : "text-pink"}`}>{msg.text}</p>}
       {songs.length > 0 && (
         <ol className="mt-4 divide-y divide-line rounded border border-line">

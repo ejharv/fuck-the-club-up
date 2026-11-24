@@ -16,7 +16,7 @@ const securityHeaders = [
       // Next.js injects inline bootstrap scripts.
       "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https://media.fucktheclubup.com https://*.googleusercontent.com",
+      "img-src 'self' data: blob: https://media.fucktheclubup.com https://*.googleusercontent.com https://*.mzstatic.com https://e-cdns-images.dzcdn.net https://cdn-images.dzcdn.net",
       "media-src 'self' blob: https://media.fucktheclubup.com",
       // Browser uploads go straight to R2.
       "connect-src 'self' https://*.r2.cloudflarestorage.com",

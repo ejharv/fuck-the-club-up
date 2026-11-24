@@ -83,6 +83,14 @@ export async function addGuestSongs(token: string, text: string): Promise<DropRe
   return { ok: true };
 }
 
+/** A song picked from search results. Same checks as typed songs: names only, never links. */
+export async function addGuestSongPick(token: string, title: string, artist: string): Promise<DropResult> {
+  const t = String(title ?? "").replace(/\s+[-–—]\s+/g, " ").trim();
+  const a = String(artist ?? "").trim();
+  if (!t || !a) return { error: "Pick a song." };
+  return addGuestSongs(token, `${a} - ${t}`);
+}
+
 export async function removeGuestSong(token: string, id: string): Promise<DropResult> {
   const ctx = await ctxFor(token);
   if ("error" in ctx) return ctx;
