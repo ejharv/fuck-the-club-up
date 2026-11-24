@@ -15,6 +15,7 @@ export type InviteData = {
   rules: string;
   mediaUrl: string | null;
   mediaKind: "video" | "photo" | null;
+  ogSig: string | null;
 };
 
 /** ISO → value for <input type="datetime-local">, in Michigan time. */

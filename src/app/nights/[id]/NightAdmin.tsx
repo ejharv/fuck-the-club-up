@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { Draft, NightStatus, Phase } from "@/lib/nights";
 import { HOUSE_RULES } from "@/lib/sections";
+import { InviteCard } from "@/components/InviteCard";
 import { InviteEditor, type InviteData } from "@/components/InviteEditor";
 import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
 import { songsFromLines, songsToLines, type Song } from "@/lib/tracks";
@@ -161,6 +162,7 @@ function LinkPanel({ nightId, freshLink, night, invite }: { nightId: string; fre
         <p className="text-dim">This night was made before links could be shown again. Make a new one below; the old one stops working.</p>
       )}
       <InviteEditor nightId={nightId} invite={invite} />
+      <InviteCard nightId={nightId} name={invite.name} opensAt={invite.opensAt} mediaUrl={invite.mediaUrl} mediaKind={invite.mediaKind} storedSig={invite.ogSig} />
       <dl className="mt-5 grid grid-cols-2 gap-3 rounded bg-night-2 p-3 text-sm sm:grid-cols-3">
         <div><dt className="mono text-maize">Party starts</dt><dd>{timeFmt(night.opensAt)}</dd></div>
         <div><dt className="mono text-maize">Photos close</dt><dd>{timeFmt(night.closesAt)}</dd></div>

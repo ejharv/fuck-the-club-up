@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Markdown } from "@/components/Markdown";
 import { dropContext } from "@/lib/drop-context";
 import { nightByToken } from "@/lib/nights";
+import { cf } from "@/lib/env";
 import { mediaUrl } from "@/lib/media-url";
 import { requestOrigin } from "@/lib/origin";
 import { formatDay } from "@/lib/format";
@@ -15,7 +16,9 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   const night = await nightByToken((await params).token);
   const title = night ? `You're invited: ${night.name}` : "You're invited";
   const description = "RSVP here. The same link takes the photos and everyone's side of the story after.";
-  const image = `${await requestOrigin()}/og/party-invite.png`;
+  const origin = await requestOrigin();
+  const ownCard = night?.og_key ? mediaUrl(night.og_key, (await cf()).MEDIA_PUBLIC_URL) : null;
+  const image = ownCard ? (ownCard.startsWith("http") ? ownCard : `${origin}${ownCard}`) : `${origin}/og/party-invite.png`;
   return {
     title: { absolute: title },
     description,

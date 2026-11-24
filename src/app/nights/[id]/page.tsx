@@ -102,6 +102,7 @@ export default async function NightAdminPage({
           rules: night.invite_rules ?? "",
           mediaUrl: night.invite_media_key ? mediaUrl(night.invite_media_key, env.MEDIA_PUBLIC_URL) : null,
           mediaKind: night.invite_media_kind,
+          ogSig: night.og_sig,
         }}
         freshLink={link ?? null}
         uploads={uploads.results.map((u) => ({ ...u, src: `/api/nights/${id}/file/${u.r2_key}` }))}

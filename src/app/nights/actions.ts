@@ -407,6 +407,26 @@ export async function setInviteMedia(nightId: string, key: string | null): Promi
   }
 }
 
+/** Store the night's drawn link-preview card (uploaded via /api/nights/[id]/invite-media). */
+export async function setInviteOg(nightId: string, key: string, sig: string): Promise<AdminResult> {
+  try {
+    const { env, night, access } = await adminNight(nightId);
+    const up = await env.DB.prepare("SELECT kind, content_type FROM uploads WHERE r2_key = ? AND email = ? AND used = 0")
+      .bind(key, access.email)
+      .first<{ kind: string; content_type: string }>();
+    const head = up ? await env.MEDIA.head(key) : null;
+    if (!up || up.content_type !== "image/png" || !head || head.size > 3 * 1048576) return { error: "The preview image didn't upload." };
+    await env.DB.batch([
+      env.DB.prepare("UPDATE nights SET og_key = ?, og_sig = ? WHERE id = ?").bind(key, String(sig).slice(0, 500), night.id),
+      env.DB.prepare("UPDATE uploads SET used = 1 WHERE r2_key = ?").bind(key),
+    ]);
+    if (night.og_key && night.og_key !== key) await env.MEDIA.delete(night.og_key);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 async function dropFieldsFor(
   nightId: string,
   input: PostFieldsInput,
