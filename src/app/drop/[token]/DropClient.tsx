@@ -25,7 +25,12 @@ type Draft = {
 
 const GUEST_MB = { photo: 25, video: 200, audio: 60 } as const;
 
-function Turnstile({ token, siteKey }: { token: string; siteKey: string }) {
+/** Shared button looks. Every tap target is at least 48px tall for thumbs. */
+const BTN_PRIMARY = "inline-flex min-h-12 items-center justify-center rounded-full bg-maize px-6 py-3 font-bold text-night hover:bg-ink disabled:opacity-60";
+const BTN_GHOST = "inline-flex min-h-12 items-center justify-center rounded-full border border-ink px-5 py-3 font-bold hover:border-maize hover:text-maize disabled:opacity-60";
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function Turnstile({ token, siteKey, phase }: { token: string; siteKey: string; phase: Phase }) {
   const box = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -55,11 +60,14 @@ function Turnstile({ token, siteKey }: { token: string; siteKey: string }) {
     s.addEventListener("load", render);
     return () => s?.removeEventListener("load", render);
   }, [token, siteKey, router]);
+  const unlocks =
+    phase === "invite" ? "then you can RSVP." : phase === "live" ? "then you can drop photos and tell your side." : "then you can read the draft and add yours.";
   return (
-    <div className="mt-10 rounded-md border border-line bg-night-2 p-5">
-      <p className="font-bold">Quick check that you&apos;re a person, then you&apos;re in.</p>
+    <div className="mt-8 rounded-md border border-maize/60 bg-night-2 p-5">
+      <p className="mono text-maize">Step 1 · one tap</p>
+      <p className="mt-2 text-lg font-bold leading-snug">Quick check that you&apos;re a person, {unlocks}</p>
       <p className="mt-1 text-sm text-dim">No sign-up, no name. Your phone just remembers you for this night.</p>
-      <div ref={box} className="mt-4 min-h-[65px]" />
+      <div ref={box} className="mt-4 min-h-[65px] max-w-full overflow-hidden" />
       {error && <p role="alert" className="mt-2 text-pink">{error}</p>}
     </div>
   );
@@ -84,12 +92,29 @@ function Rsvp({ token, current }: { token: string; current: { nickname: string; 
     ["maybe", "Maybe"],
     ["cant", "Can't make it"],
   ] as const;
+  const currentLabel = choices.find(([v]) => v === current?.answer)?.[1];
   return (
-    <section className="mt-10">
-      <h2 className="display text-3xl">RSVP</h2>
+    <section id="rsvp" className="mt-8 scroll-mt-4 rounded-md border border-line bg-night-2 p-5">
+      <h2 className="display text-3xl">Are you coming?</h2>
+      {current && currentLabel ? (
+        <p className="mt-2 text-dim">
+          You said <span className="font-bold text-maize">{currentLabel}</span> as {current.nickname}. Tap another answer to change it.
+        </p>
+      ) : (
+        <p className="mt-2 text-dim">Pick a nickname and tap an answer. That&apos;s it.</p>
+      )}
       <label htmlFor="rsvp-nick" className="mt-4 block font-bold">Your nickname</label>
-      <input id="rsvp-nick" value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40} className="field mt-2 sm:w-72" placeholder="What the group chat calls you" />
-      <div className="mt-4 flex flex-wrap gap-3">
+      <input
+        id="rsvp-nick"
+        value={nickname}
+        onChange={(e) => setNickname(e.target.value)}
+        maxLength={40}
+        autoComplete="nickname"
+        enterKeyHint="done"
+        className="field mt-2 min-h-12 sm:w-72"
+        placeholder="What the group chat calls you"
+      />
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-3">
         {choices.map(([value, label]) => (
           <button
             key={value}
@@ -97,14 +122,19 @@ function Rsvp({ token, current }: { token: string; current: { nickname: string; 
             disabled={pending}
             aria-pressed={current?.answer === value}
             onClick={() => run(() => rsvp(token, nickname, value), value === "cant" ? "Got it. Next time." : "You're on the list.")}
-            className={`rounded-full border px-5 py-2 font-bold ${current?.answer === value ? "border-maize bg-maize text-night" : "border-ink hover:border-maize hover:text-maize"}`}
+            className={`min-h-12 rounded-full border px-3 py-2 font-bold leading-tight disabled:opacity-60 sm:px-5 ${
+              current?.answer === value ? "border-maize bg-maize text-night" : "border-ink hover:border-maize hover:text-maize"
+            }`}
           >
             {label}
           </button>
         ))}
       </div>
-      {msg && <p role="status" className={`mt-3 ${msg.ok ? "text-maize" : "text-pink"}`}>{msg.text}</p>}
-      <p className="mt-6 text-sm text-dim">When the party starts, this same link opens for photos, videos and everyone&apos;s side of the story.</p>
+      {(pending || msg) && (
+        <p role="status" aria-live="polite" className={`mt-3 ${pending ? "text-dim" : msg?.ok ? "text-maize" : "text-pink"}`}>
+          {pending ? "Saving…" : msg?.text}
+        </p>
+      )}
     </section>
   );
 }
@@ -116,8 +146,19 @@ function Uploader({ token }: { token: string }) {
   const [consent, setConsent] = useState(false);
   const [nickname, setNickname] = useState("");
   const [items, setItems] = useState<UploadItem[]>([]);
+  const [inView, setInView] = useState(true);
   const input = useRef<HTMLInputElement>(null);
+  const pick = useRef<HTMLLabelElement>(null);
   const patch = (id: string, p: Partial<UploadItem>) => setItems((l) => l.map((i) => (i.id === id ? { ...i, ...p } : i)));
+
+  // Show a thumb-reach bar at the bottom of the screen whenever the big upload button is off screen.
+  useEffect(() => {
+    const el = pick.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(([e]) => setInView(e.isIntersecting), { rootMargin: "0px 0px -80px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   async function one(file: File, id: string) {
     try {
@@ -155,41 +196,103 @@ function Uploader({ token }: { token: string }) {
   }
 
   const done = items.filter((i) => i.done).length;
+  const failed = items.filter((i) => i.error).length;
+  const active = items.length - done - failed;
+  const overall = items.length ? items.reduce((s, i) => s + (i.done || i.error ? 1 : i.progress), 0) / items.length : 0;
+  const summary = active
+    ? `Uploading… ${done} of ${items.length} in`
+    : done
+      ? `Got it, ${plural(done, "file")} in.`
+      : "Nothing went up.";
+
   return (
-    <section className="mt-10">
+    <section id="photos" className="mt-8 scroll-mt-4">
       <h2 className="display text-3xl">Drop your photos and videos</h2>
-      <label htmlFor="up-nick" className="mt-4 block font-bold">Nickname (optional)</label>
-      <input id="up-nick" value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40} className="field mt-2 sm:w-72" />
-      <label className="mt-4 flex gap-3 rounded-md border border-line bg-night-2 p-4">
-        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1 h-5 w-5 shrink-0 accent-[var(--maize)]" />
+      <p className="mt-2 text-dim">Straight from your camera roll. Pick as many as you want.</p>
+
+      <label htmlFor="up-nick" className="mt-5 block font-bold">
+        Nickname <span className="font-normal text-dim">(optional, for credit)</span>
+      </label>
+      <input
+        id="up-nick"
+        value={nickname}
+        onChange={(e) => setNickname(e.target.value)}
+        maxLength={40}
+        autoComplete="nickname"
+        enterKeyHint="done"
+        className="field mt-2 min-h-12 sm:w-72"
+      />
+
+      <label className={`mt-4 flex min-h-12 cursor-pointer items-start gap-3 rounded-md border bg-night-2 p-4 ${consent ? "border-maize" : "border-line"}`}>
+        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-6 w-6 shrink-0 accent-[var(--maize)]" />
         <span>Everyone in these is cool with them going up, and I&apos;m 21+.</span>
       </label>
-      <label className={`mt-4 block cursor-pointer rounded-md bg-maize px-6 py-5 text-center text-lg font-bold text-night ${consent ? "hover:bg-ink" : "pointer-events-none opacity-50"}`}>
-        Add photos and videos
-        <input ref={input} type="file" multiple accept={ACCEPT_ATTR} disabled={!consent} className="sr-only" onChange={(e) => add(e.target.files)} />
+
+      <label
+        ref={pick}
+        className={`mt-4 flex min-h-16 cursor-pointer flex-col items-center justify-center rounded-md bg-maize px-6 py-4 text-center text-night ${consent ? "hover:bg-ink" : "pointer-events-none opacity-50"}`}
+      >
+        <span className="text-lg font-bold">{items.length ? "Add more photos and videos" : "Add photos and videos"}</span>
+        {!consent && <span className="mono mt-1">Tick the box above first</span>}
+        <input id="up-files" ref={input} type="file" multiple accept={ACCEPT_ATTR} disabled={!consent} className="sr-only" onChange={(e) => add(e.target.files)} />
       </label>
       <p className="mt-2 text-sm text-dim">Photos get their location and camera info stripped before upload. Videos keep theirs.</p>
+
       {items.length > 0 && (
-        <>
-          <p role="status" className="mt-4 font-bold text-maize">
-            {done === items.length ? `Got it, ${done} ${done === 1 ? "file" : "files"} in.` : `Uploading ${done} of ${items.length}…`}
+        <div className={`mt-5 rounded-md border p-4 ${!active && done ? "border-maize bg-maize/10" : "border-line bg-night-2"}`}>
+          <p role="status" aria-live="polite" className={`display ${!active && done ? "text-2xl text-maize" : "text-xl"}`}>
+            {summary}
           </p>
+          {failed > 0 && <p className="mt-1 text-sm text-pink">{plural(failed, "file")} didn&apos;t make it. See below.</p>}
+          {active > 0 && (
+            <div className="mt-3 h-2 overflow-hidden rounded bg-night" aria-hidden>
+              <div className="h-full bg-maize transition-[width]" style={{ width: `${overall * 100}%` }} />
+            </div>
+          )}
+          {!active && done > 0 && <p className="mt-1 text-sm text-dim">Keep them coming. The album updates as people upload.</p>}
           <ul className="mt-3 space-y-2">
             {items.map((i) => (
-              <li key={i.id} className="rounded bg-night-2 p-3 text-sm">
+              <li key={i.id} className="rounded bg-night p-3 text-sm">
                 <div className="flex justify-between gap-3">
-                  <span className="truncate">{i.name}</span>
-                  <span className={i.error ? "text-pink" : "text-dim"}>{i.error ?? (i.done ? "Done" : `${Math.round(i.progress * 100)}%`)}</span>
+                  <span className="min-w-0 truncate">{i.name}</span>
+                  <span className={`shrink-0 ${i.error ? "text-pink" : i.done ? "text-maize" : "text-dim"}`}>
+                    {i.error ? "Failed" : i.done ? "Done ✓" : `${Math.round(i.progress * 100)}%`}
+                  </span>
                 </div>
+                {i.error && <p className="mt-1 text-pink">{i.error}</p>}
                 {!i.done && !i.error && (
-                  <div className="mt-2 h-1.5 overflow-hidden rounded bg-night">
+                  <div className="mt-2 h-1.5 overflow-hidden rounded bg-night-2">
                     <div className="h-full bg-maize transition-[width]" style={{ width: `${i.progress * 100}%` }} />
                   </div>
                 )}
               </li>
             ))}
           </ul>
-        </>
+        </div>
+      )}
+
+      {/* Sticky bottom bar: one-thumb access to uploading (and its progress) from anywhere on the page. */}
+      {!inView && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t sm:hidden border-line bg-night/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
+          <div className="mx-auto flex max-w-3xl items-center gap-3">
+            {active > 0 ? (
+              <a href="#photos" className="flex min-h-12 flex-1 flex-col justify-center">
+                <span className="font-bold">{summary}</span>
+                <span className="mt-1 h-1.5 overflow-hidden rounded bg-night-2">
+                  <span className="block h-full bg-maize transition-[width]" style={{ width: `${overall * 100}%` }} />
+                </span>
+              </a>
+            ) : consent ? (
+              <label htmlFor="up-files" className={`${BTN_PRIMARY} flex-1 cursor-pointer text-lg`}>
+                {done ? `Add more · ${done} in` : "Add photos and videos"}
+              </label>
+            ) : (
+              <a href="#photos" className={`${BTN_PRIMARY} flex-1 text-lg`}>
+                Add photos and videos
+              </a>
+            )}
+          </div>
+        </div>
       )}
     </section>
   );
@@ -200,21 +303,38 @@ function Account({ token, account, count }: { token: string; account: { nickname
   const [body, setBody] = useState(account?.body ?? "");
   const { pending, msg, run } = useAction();
   return (
-    <section className="mt-12">
+    <section id="story" className="mt-14 scroll-mt-4">
       <h2 className="display text-3xl">Your side of the story</h2>
       <p className="mt-2 text-dim">
         What happened, from where you were standing. Times, prices, the line, who did what (use nicknames). Claude stitches everyone&apos;s version into one post.
-        {count > 0 && ` ${count} ${count === 1 ? "account" : "accounts"} in so far.`}
       </p>
-      <label htmlFor="acct-nick" className="mt-4 block font-bold">Nickname</label>
-      <input id="acct-nick" value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40} className="field mt-2 sm:w-72" placeholder="The only name that shows up" />
+      {count > 0 && <p className="mono mt-3 text-maize">{plural(count, "account")} in so far</p>}
+      <label htmlFor="acct-nick" className="mt-5 block font-bold">Nickname</label>
+      <input
+        id="acct-nick"
+        value={nickname}
+        onChange={(e) => setNickname(e.target.value)}
+        maxLength={40}
+        autoComplete="nickname"
+        className="field mt-2 min-h-12 sm:w-72"
+        placeholder="The only name that shows up"
+      />
       <label htmlFor="acct-body" className="mt-4 block font-bold">The night, according to you</label>
-      <textarea id="acct-body" value={body} onChange={(e) => setBody(e.target.value)} rows={8} maxLength={4000} className="field mt-2 leading-relaxed" placeholder="We got there at 10:40, which everyone agreed was too early…" />
+      <textarea
+        id="acct-body"
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        rows={6}
+        maxLength={4000}
+        className="field mt-2 leading-relaxed"
+        placeholder="We got there at 10:40, which everyone agreed was too early…"
+      />
+      <p className="mt-1 text-right text-xs text-dim">{body.length} / 4000</p>
       <button
         type="button"
         disabled={pending}
         onClick={() => run(() => saveAccount(token, nickname, body), account ? "Updated." : "Saved. You can edit it until the post drops.")}
-        className="mt-3 rounded-full bg-maize px-6 py-3 font-bold text-night hover:bg-ink disabled:opacity-60"
+        className={`${BTN_PRIMARY} mt-2 w-full sm:w-auto`}
       >
         {pending ? "Saving…" : account ? "Update my account" : "Save my account"}
       </button>
@@ -234,11 +354,20 @@ function Review({ token, draft, body, wrote }: { token: string; draft: Draft; bo
     ["Ride home", draft.wristband.rideHome],
   ].filter(([, v]) => v);
   return (
-    <section className="mt-12">
-      <h2 className="display text-3xl text-pink">The draft (version {draft.version})</h2>
+    <section id="draft" className="mt-14 scroll-mt-4">
+      <p className="mono text-pink">Claude&apos;s draft · version {draft.version}</p>
+      <h2 className="display mt-2 text-3xl">Is this how it went?</h2>
       <p className="mt-2 text-dim">Read it, leave notes, approve it when it&apos;s right. Check that nobody&apos;s real name slipped in.</p>
-      <div className="mt-6 rounded-md border border-line bg-night-2 p-5 sm:p-8">
-        <h3 className="display text-[clamp(2rem,7vw,3.5rem)]">{draft.title}</h3>
+      <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="mono text-maize">
+          {plural(draft.approvals, "approval")} · {plural(draft.notes.length, "note")}
+        </span>
+        <a href="#review" className="mono inline-flex min-h-11 items-center text-ink underline underline-offset-4">
+          Skip to {wrote ? "approve and notes" : "notes"} ↓
+        </a>
+      </p>
+      <div className="mt-4 rounded-md border border-line bg-night-2 p-4 sm:p-8">
+        <h3 className="display text-[clamp(2rem,9vw,3.5rem)] break-words">{draft.title}</h3>
         {draft.dek && <p className="mt-3 text-xl">{draft.dek}</p>}
         {facts.length > 0 && (
           <dl className="mt-5 grid gap-3 rounded border-2 border-dashed border-maize p-4 sm:grid-cols-3">
@@ -250,48 +379,61 @@ function Review({ token, draft, body, wrote }: { token: string; draft: Draft; bo
             ))}
           </dl>
         )}
-        <div className="mt-6">{body}</div>
+        <div className="mt-6 break-words">{body}</div>
       </div>
 
-      {wrote && (
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <button
-            type="button"
-            disabled={approveAction.pending}
-            onClick={() => approveAction.run(() => setApproval(token, draft.version, !draft.approvedByMe), draft.approvedByMe ? "Approval taken back." : "Approved.")}
-            className={`rounded-full px-6 py-3 font-bold ${draft.approvedByMe ? "border border-maize text-maize" : "bg-maize text-night hover:bg-ink"}`}
-          >
-            {draft.approvedByMe ? "Take back my approval" : "Approve this draft"}
-          </button>
-          <span className="text-dim">{draft.approvals} approved so far</span>
-          {approveAction.msg && <span className={approveAction.msg.ok ? "text-maize" : "text-pink"}>{approveAction.msg.text}</span>}
-        </div>
-      )}
+      <div id="review" className="mt-6 scroll-mt-4 rounded-md border border-line p-4 sm:p-5">
+        {wrote ? (
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              disabled={approveAction.pending}
+              onClick={() => approveAction.run(() => setApproval(token, draft.version, !draft.approvedByMe), draft.approvedByMe ? "Approval taken back." : "Approved.")}
+              className={draft.approvedByMe ? `${BTN_GHOST} w-full border-maize text-maize sm:w-auto` : `${BTN_PRIMARY} w-full sm:w-auto`}
+            >
+              {approveAction.pending ? "Saving…" : draft.approvedByMe ? "Take back my approval" : "Approve this draft"}
+            </button>
+            <span className="text-dim">
+              {draft.approvedByMe ? "You approved this. " : ""}
+              {plural(draft.approvals, "approval")} so far
+            </span>
+            {approveAction.msg && (
+              <span role="status" className={approveAction.msg.ok ? "text-maize" : "text-pink"}>
+                {approveAction.msg.text}
+              </span>
+            )}
+          </div>
+        ) : (
+          <p className="text-dim">
+            Approving is for people who wrote their side.{" "}
+            <a href="#story" className="text-maize underline underline-offset-4">Add yours</a> and the approve button shows up here.
+          </p>
+        )}
 
-      <div className="mt-8">
-        <h3 className="font-bold">Notes on this draft</h3>
+        <h3 className="mt-6 font-bold">Notes on this draft</h3>
         {draft.notes.length ? (
           <ul className="mt-3 space-y-2">
             {draft.notes.map((n, i) => (
               <li key={i} className="rounded bg-night-2 p-3">
-                <span className="mono text-maize">{n.nickname ?? "Admin"}</span> <span>{n.body}</span>
+                <p className="mono text-maize">{n.nickname ?? "Admin"}</p>
+                <p className="mt-1 break-words">{n.body}</p>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-dim">No notes yet.</p>
+          <p className="mt-2 text-dim">No notes yet. Something wrong? Say so.</p>
         )}
         <div className="mt-4 grid gap-3 sm:grid-cols-[12rem_1fr]">
-          <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40} aria-label="Your nickname" placeholder="Nickname" className="field" />
-          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={600} aria-label="Your note" placeholder='"I did NOT cry at Taco Bell"' className="field" />
+          <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40} aria-label="Your nickname" placeholder="Nickname" autoComplete="nickname" className="field min-h-12" />
+          <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={600} aria-label="Your note" placeholder='"I did NOT cry at Taco Bell"' enterKeyHint="send" className="field min-h-12" />
         </div>
         <button
           type="button"
           disabled={noteAction.pending}
           onClick={() => noteAction.run(async () => { const r = await addNote(token, draft.version, nickname, note); if (r && "ok" in r) setNote(""); return r; }, "Note added.")}
-          className="mt-3 rounded-full border border-ink px-5 py-2 font-bold hover:border-maize hover:text-maize"
+          className={`${BTN_GHOST} mt-3 w-full sm:w-auto`}
         >
-          Add note
+          {noteAction.pending ? "Adding…" : "Add note"}
         </button>
         {noteAction.msg && <p role="status" className={`mt-2 ${noteAction.msg.ok ? "text-maize" : "text-pink"}`}>{noteAction.msg.text}</p>}
       </div>
@@ -303,12 +445,14 @@ function Album({ token, items }: { token: string; items: Array<{ key: string; ki
   if (!items.length) return null;
   const file = (k: string) => `/api/drop/${token}/file/${k}`;
   return (
-    <section className="mt-12">
+    <section id="album" className="mt-14 scroll-mt-4">
       <h2 className="display text-3xl">The album</h2>
-      <p className="mt-2 text-dim">{items.length} {items.length === 1 ? "file" : "files"}. Anyone with this link can see and download them, so don&apos;t forward it around.</p>
-      <ul className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <p className="mt-2 text-dim">
+        {plural(items.length, "file")}. Anyone with this link can see and download them, so don&apos;t forward it around.
+      </p>
+      <ul className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
         {items.map((m) => (
-          <li key={m.key} className="overflow-hidden rounded bg-night-2">
+          <li key={m.key} className="min-w-0 overflow-hidden rounded bg-night-2">
             {m.kind === "photo" ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={file(m.key)} alt={m.nickname ? `From ${m.nickname}` : "From the night"} loading="lazy" className="aspect-square w-full object-cover" />
@@ -317,14 +461,34 @@ function Album({ token, items }: { token: string; items: Array<{ key: string; ki
             ) : (
               <div className="grid aspect-square place-items-center p-3"><audio src={file(m.key)} controls preload="none" className="w-full" /></div>
             )}
-            <div className="flex items-center justify-between gap-2 p-2 text-sm">
-              <span className="truncate text-dim">{m.nickname ?? ""}</span>
-              <a href={`${file(m.key)}?dl=1`} className="mono shrink-0 text-maize underline underline-offset-4">Download</a>
+            <div className="flex items-center justify-between gap-1 pl-2 text-sm">
+              <span className="min-w-0 truncate text-dim">{m.nickname ?? ""}</span>
+              <a
+                href={`${file(m.key)}?dl=1`}
+                aria-label={`Download ${m.kind}${m.nickname ? ` from ${m.nickname}` : ""}`}
+                className="mono inline-flex min-h-11 shrink-0 items-center px-2 text-maize underline underline-offset-4"
+              >
+                Save ↓
+              </a>
             </div>
           </li>
         ))}
       </ul>
     </section>
+  );
+}
+
+/** Jump links for the long live/after page, so nobody has to scroll-hunt one-handed. */
+function JumpNav({ links }: { links: Array<[string, string]> }) {
+  if (links.length < 2) return null;
+  return (
+    <nav aria-label="On this page" className="mt-5 flex flex-wrap gap-2">
+      {links.map(([href, label]) => (
+        <a key={href} href={href} className="mono inline-flex min-h-11 items-center rounded-full border border-line bg-night-2 px-3 hover:border-maize hover:text-maize">
+          {label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
@@ -342,14 +506,30 @@ export function DropClient(props: {
 }) {
   const { token, phase, verified } = props;
   const canAct = phase !== "dropped";
+  const showAccount = verified && (phase === "live" || phase === "after");
+  const showDraft = verified && Boolean(props.draft);
+  const showAlbum = phase !== "invite" && props.album.length > 0;
+  const jump: Array<[string, string]> = [];
+  if (verified && phase === "live") jump.push(["#photos", "Photos"]);
+  // After the night, the draft is the thing to act on, so it goes first.
+  const draftFirst = phase === "after";
+  if (showDraft && draftFirst) jump.push(["#draft", "Draft"]);
+  if (showAccount) jump.push(["#story", "Your side"]);
+  if (showDraft && !draftFirst) jump.push(["#draft", "Draft"]);
+  if (showAlbum) jump.push(["#album", "Album"]);
+  const review = showDraft ? <Review token={token} draft={props.draft!} body={props.draftBody} wrote={Boolean(props.account)} /> : null;
   return (
     <>
-      {canAct && !verified && <Turnstile token={token} siteKey={props.siteKey} />}
+      {canAct && !verified && <Turnstile token={token} siteKey={props.siteKey} phase={phase} />}
       {verified && phase === "invite" && <Rsvp token={token} current={props.rsvp} />}
+      {verified && phase !== "invite" && <JumpNav links={jump} />}
       {verified && phase === "live" && <Uploader token={token} />}
-      {verified && (phase === "live" || phase === "after") && <Account token={token} account={props.account} count={props.accountCount} />}
-      {verified && props.draft && <Review token={token} draft={props.draft} body={props.draftBody} wrote={Boolean(props.account)} />}
+      {showDraft && draftFirst && review}
+      {showAccount && <Account token={token} account={props.account} count={props.accountCount} />}
+      {showDraft && !draftFirst && review}
       {phase !== "invite" && <Album token={token} items={props.album} />}
+      {/* Room so the sticky upload bar never covers the last thing on the page. */}
+      {verified && phase === "live" && <div aria-hidden className="h-24 sm:hidden" />}
     </>
   );
 }

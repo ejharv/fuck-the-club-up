@@ -78,65 +78,16 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   const going = rsvps.results.filter((r) => r.answer === "going").map((r) => r.nickname);
   const maybe = rsvps.results.filter((r) => r.answer === "maybe").map((r) => r.nickname);
 
-  return (
-    <article className="mx-auto max-w-3xl px-4 pt-10 sm:px-6">
-      <p className="mono text-pink">
-        {phase === "invite" ? "You're invited" : phase === "live" ? "It's happening" : phase === "after" ? "The morning after" : "It dropped"}
-      </p>
-      <h1 className="display mt-3 text-[clamp(2.75rem,11vw,6rem)]">{night.name}</h1>
+  const lede =
+    phase === "invite"
+      ? "This is the party link. RSVP now; once the night starts, this same link takes the photos."
+      : phase === "live"
+        ? "It's on. Drop your photos and videos and tell your side. Claude turns it all into one post."
+        : phase === "after"
+          ? "Photos and stories are in. Read the draft, leave notes, approve it when it's right."
+          : "The night's been written up. Thanks for being there.";
 
-      {phase === "invite" && (
-        <dl className="mt-8 grid gap-4 rounded-md border-2 border-dashed border-maize p-5 sm:grid-cols-2">
-          <div>
-            <dt className="mono text-maize">When</dt>
-            <dd className="mt-1 text-lg">{timeFmt(night.opens_at)}</dd>
-          </div>
-          {night.location_text && (
-            <div>
-              <dt className="mono text-maize">Where</dt>
-              <dd className="mt-1 text-lg">{night.location_text}</dd>
-            </div>
-          )}
-          {night.dress_code && (
-            <div>
-              <dt className="mono text-maize">Dress code</dt>
-              <dd className="mt-1 text-lg">{night.dress_code}</dd>
-            </div>
-          )}
-          <div>
-            <dt className="mono text-maize">Coming</dt>
-            <dd className="mt-1 text-lg">
-              {going.length ? going.join(", ") : "Be the first"}
-              {maybe.length ? <span className="text-dim"> (maybe: {maybe.join(", ")})</span> : null}
-            </dd>
-          </div>
-        </dl>
-      )}
-      {phase === "invite" && night.invite_details && <p className="mt-6 whitespace-pre-line text-lg">{night.invite_details}</p>}
-      {phase === "invite" && (
-        <p className="mt-4">
-          <a href={`/api/drop/${token}/calendar`} className="mono text-maize underline underline-offset-4">
-            Add to calendar
-          </a>
-        </p>
-      )}
-
-      {phase !== "invite" && (
-        <p className="mt-4 text-dim">
-          {formatDay(night.night_of)}
-          {phase === "live" && ` · photos and accounts open until ${timeFmt(night.closes_at)}`}
-        </p>
-      )}
-
-      {phase === "dropped" && post && (
-        <p className="mt-8 rounded-md border-2 border-dashed border-maize p-5 text-lg">
-          The story is up.{" "}
-          <Link href={`/posts/${post.slug}`} className="font-bold text-maize underline underline-offset-4">
-            Read it
-          </Link>
-        </p>
-      )}
-
+  const client = (
       <DropClient
         token={token}
         phase={phase}
@@ -161,6 +112,79 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         }
         draftBody={draft && phase !== "dropped" ? <Markdown>{draft.body}</Markdown> : null}
       />
+  );
+
+  return (
+    <article className="mx-auto max-w-3xl px-4 pt-8 sm:px-6 sm:pt-10">
+      <p className="mono text-pink">
+        {phase === "invite" ? "You're invited" : phase === "live" ? "It's happening" : phase === "after" ? "The morning after" : "It dropped"}
+      </p>
+      <h1 className="display mt-3 break-words text-[clamp(2.5rem,11vw,6rem)]">{night.name}</h1>
+      <p className="mt-4 text-lg leading-snug">{lede}</p>
+
+      {phase === "invite" && (
+        <dl className="mt-6 grid gap-3 rounded-md border-2 border-dashed border-maize p-4 sm:grid-cols-2 sm:gap-4 sm:p-5">
+          <div>
+            <dt className="mono text-maize">When</dt>
+            <dd className="mt-0.5 text-lg leading-snug">{timeFmt(night.opens_at)}</dd>
+          </div>
+          {night.location_text && (
+            <div>
+              <dt className="mono text-maize">Where</dt>
+              <dd className="mt-0.5 text-lg leading-snug break-words">{night.location_text}</dd>
+            </div>
+          )}
+          {night.dress_code && (
+            <div>
+              <dt className="mono text-maize">Dress code</dt>
+              <dd className="mt-0.5 text-lg leading-snug">{night.dress_code}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      {phase !== "invite" && (
+        <p className="mt-3 text-dim">
+          {formatDay(night.night_of)}
+          {phase === "live" && ` · open until ${timeFmt(night.closes_at)}`}
+        </p>
+      )}
+
+      {phase === "dropped" && post && (
+        <Link
+          href={`/posts/${post.slug}`}
+          className="mt-8 flex min-h-16 items-center justify-between gap-4 rounded-md border-2 border-dashed border-maize p-5 text-lg hover:bg-night-2"
+        >
+          <span>The story is up.</span>
+          <span className="font-bold text-maize underline underline-offset-4">Read it →</span>
+        </Link>
+      )}
+
+      {client}
+
+      {phase === "invite" && (
+        <section className="mt-10 space-y-6">
+          <div>
+            <h2 className="mono text-maize">Who&apos;s coming</h2>
+            <p className="mt-2 text-lg">
+              {going.length ? going.join(", ") : "Nobody yet. Be the first."}
+              {maybe.length ? <span className="text-dim"> (maybe: {maybe.join(", ")})</span> : null}
+            </p>
+          </div>
+          {night.invite_details && (
+            <div>
+              <h2 className="mono text-maize">The plan</h2>
+              <p className="mt-2 whitespace-pre-line text-lg">{night.invite_details}</p>
+            </div>
+          )}
+          <a
+            href={`/api/drop/${token}/calendar`}
+            className="inline-flex min-h-12 w-full items-center justify-center rounded-full border border-ink px-5 py-3 font-bold hover:border-maize hover:text-maize sm:w-auto"
+          >
+            Add to calendar
+          </a>
+        </section>
+      )}
     </article>
   );
 }
