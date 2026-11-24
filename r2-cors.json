@@ -5,7 +5,7 @@
         "origins": [
           "https://fucktheclubup.com",
           "https://www.fucktheclubup.com",
-          "https://fuck-the-club-up.ejharv.workers.dev"
+          "https://fuck-the-club-up.fuck-the-club-up.workers.dev"
         ],
         "methods": ["PUT"],
         "headers": ["content-type"]

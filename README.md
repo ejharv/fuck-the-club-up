@@ -86,7 +86,7 @@ npm run dev                            # http://localhost:3000
 5. **Google OAuth** (Cloud Console → Credentials → OAuth client, Web). Authorized redirect URIs:
    - `https://fucktheclubup.com/api/auth/callback/google`
    - `https://www.fucktheclubup.com/api/auth/callback/google`
-   - `https://fuck-the-club-up.<your-subdomain>.workers.dev/api/auth/callback/google`
+   - `https://fuck-the-club-up.fuck-the-club-up.workers.dev/api/auth/callback/google`
    - `http://localhost:3000/api/auth/callback/google`
 6. **Turnstile.** In the Cloudflare dashboard → Turnstile, add a widget for `fucktheclubup.com` (and the workers.dev host). Put the site key in `wrangler.jsonc` → `vars.TURNSTILE_SITE_KEY`.
 7. **Bedrock.** The IAM user `fuck-the-club-up-bedrock` already exists in the AWS account and can only invoke Claude Sonnet 4.6. Make a production access key for it (separate from your local one):

@@ -17,7 +17,7 @@
       "binding": "DB",
       "database_name": "fuck-the-club-up",
       // Fill in after `npx wrangler d1 create fuck-the-club-up`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "4caa4e3b-9d91-4e78-9f1b-f01569991934",
       "migrations_dir": "migrations"
     }
   ],
@@ -54,7 +54,7 @@
   "vars": {
     "R2_BUCKET_NAME": "fuck-the-club-up-media",
     "INBOX_BUCKET_NAME": "fuck-the-club-up-inbox",
-    "R2_ACCOUNT_ID": "",
+    "R2_ACCOUNT_ID": "0608b07bb3de61e3c8975befa6fe1c3f",
     "MEDIA_PUBLIC_URL": "",
     "BEDROCK_REGION": "us-east-1",
     "BEDROCK_MODEL_ID": "us.anthropic.claude-sonnet-4-6",
