@@ -9,6 +9,8 @@ Guidance for building the site. These are notes, not code: adapt them to this re
 | [03-content-model.md](03-content-model.md) | Post fields and routes (storage superseded, see below) |
 | [04-launch-cloudflare.md](04-launch-cloudflare.md) | Domain at Porkbun, DNS move to Cloudflare (hosting superseded, see below) |
 | [05-backdating-and-drop-links.md](05-backdating-and-drop-links.md) | Backdated posts, party drop links, takedowns (built; see below for how part 2 changed) |
+| [06-business-model.md](06-business-model.md) | Who pays and why, and the build order: open hosting, photo flags, story cards, follows, venue pages, paid entry |
+| [07-installable-site-and-push.md](07-installable-site-and-push.md) | Home-screen install and push alerts, instead of a native app for now |
 
 Decisions so far:
 - Host: Cloudflare **Workers** (Next.js via OpenNext), not Pages. Friends post from the site, so it needs a server.
