@@ -78,7 +78,7 @@ export function InviteEditor({ nightId, invite }: { nightId: string; invite: Inv
   return (
     <div className="mt-5 rounded-md border border-line">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex min-h-12 w-full items-center justify-between gap-3 px-4 text-left font-bold">
-        Edit the invite
+        Edit the invite: video, photo, details, rules
         <span className="mono text-maize">{open ? "Close" : "Open"}</span>
       </button>
       {open && (

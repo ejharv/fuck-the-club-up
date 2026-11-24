@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { dropContext, requireVerified } from "@/lib/drop-context";
 import { clean } from "@/lib/post-fields";
-import { promoteWaitlist, rsvpStatement } from "@/lib/guests";
+import { UNLIMITED_PER_GUEST, UNLIMITED_PLUS_ONES, promoteWaitlist, rsvpStatement } from "@/lib/guests";
 import { isReviewable, latestDraft, phaseOf } from "@/lib/nights";
 import { LIMITS } from "@/lib/synthesis";
 
@@ -26,8 +26,9 @@ export async function rsvp(token: string, nickname: string, answer: string, plus
   if (!name) return { error: "Add your name or a nickname so the host knows who's coming." };
   if (!["going", "maybe", "cant"].includes(answer)) return { error: "Pick going, maybe or can't." };
   const plus = answer === "going" ? Math.trunc(Number(plusOnes) || 0) : 0;
-  if (plus < 0 || plus > ctx.night.max_plus_ones) {
-    return { error: ctx.night.max_plus_ones ? `You can bring up to ${ctx.night.max_plus_ones}.` : "This one's no +1s." };
+  const allowed = ctx.night.max_plus_ones >= UNLIMITED_PLUS_ONES ? UNLIMITED_PER_GUEST : ctx.night.max_plus_ones;
+  if (plus < 0 || plus > allowed) {
+    return { error: allowed ? `You can bring up to ${allowed}.` : "This one's no +1s." };
   }
   await rsvpStatement(ctx.env.DB, ctx.night.id, ctx.device, name, answer, plus).run();
   await promoteWaitlist(ctx.env.DB, ctx.night.id);

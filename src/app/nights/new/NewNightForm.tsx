@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { createNight, type AdminResult } from "../actions";
+import { InviteMediaField } from "./InviteMediaField";
 
 export function NewNightForm() {
   const [state, action, pending] = useActionState<AdminResult, FormData>(createNight, undefined);
@@ -29,6 +30,7 @@ export function NewNightForm() {
         <input id="location" name="location" maxLength={200} autoComplete="off" enterKeyHint="next" className="field" placeholder="Address or meetup spot" />
         <p className="mt-1 text-sm text-dim">Only people with the link see this. It never goes in the post.</p>
       </div>
+      <InviteMediaField />
       <div>
         <label htmlFor="dressCode" className="mb-2 block font-bold">Dress code (optional)</label>
         <input id="dressCode" name="dressCode" maxLength={100} autoComplete="off" enterKeyHint="next" className="field" placeholder="All black, no exceptions" />
@@ -48,6 +50,7 @@ export function NewNightForm() {
               <option value="2">Up to 2</option>
               <option value="3">Up to 3</option>
               <option value="5">Up to 5</option>
+              <option value="99">Unlimited</option>
             </select>
           </div>
         </div>

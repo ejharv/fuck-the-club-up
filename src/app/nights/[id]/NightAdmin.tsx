@@ -360,7 +360,7 @@ function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[
         <div>
           <label htmlFor="g-plus" className="mb-1 block text-sm font-bold">+1s per guest</label>
           <select id="g-plus" value={plus} onChange={(e) => setPlus(e.target.value)} className="field sm:w-36">
-            {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n === 0 ? "None" : `Up to ${n}`}</option>)}
+            {[0, 1, 2, 3, 4, 5, 99].map((n) => <option key={n} value={n}>{n === 0 ? "None" : n === 99 ? "Unlimited" : `Up to ${n}`}</option>)}
           </select>
         </div>
         <button type="button" disabled={pending} onClick={() => run(() => setGuestLimits(nightId, capacity, plus))} className={`${btnGhost} col-span-2`}>

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { encryptText, randomToken, sha256Hex } from "@/lib/crypto";
-import { MAX_PLUS_ONES_LIMIT, promoteWaitlist } from "@/lib/guests";
+import { MAX_PLUS_ONES_LIMIT, UNLIMITED_PLUS_ONES, promoteWaitlist } from "@/lib/guests";
 import { runDrop, type DropFields } from "@/lib/drop";
 import { cf } from "@/lib/env";
 import { defaultClosesAt, getNight, isStuckDrop, latestDraft } from "@/lib/nights";
@@ -42,7 +42,9 @@ function guestLimits(capacityRaw: unknown, plusRaw: unknown): { capacity: number
   const capacity = c ? Math.trunc(Number(c)) : null;
   if (capacity !== null && (!Number.isFinite(capacity) || capacity < 1 || capacity > 5000)) return { error: "The guest limit has to be between 1 and 5000, or blank for no limit." };
   const maxPlusOnes = Math.trunc(Number(plusRaw ?? 0) || 0);
-  if (maxPlusOnes < 0 || maxPlusOnes > MAX_PLUS_ONES_LIMIT) return { error: `+1s can be 0 to ${MAX_PLUS_ONES_LIMIT}.` };
+  if (maxPlusOnes !== UNLIMITED_PLUS_ONES && (maxPlusOnes < 0 || maxPlusOnes > MAX_PLUS_ONES_LIMIT)) {
+    return { error: `+1s can be 0 to ${MAX_PLUS_ONES_LIMIT}, or unlimited.` };
+  }
   return { capacity, maxPlusOnes };
 }
 
@@ -73,6 +75,19 @@ export async function createNight(_prev: AdminResult, form: FormData): Promise<A
       .bind(id, name, nightOf, await sha256Hex(token), await encryptText(env.AUTH_SECRET, token), limits.capacity, limits.maxPlusOnes, opensAt, closesAt, clean(form.get("details"), 2000),
         clean(form.get("location"), 200), clean(form.get("dressCode"), 100), admin.email, new Date().toISOString())
       .run();
+    const mediaKey = String(form.get("mediaKey") ?? "");
+    if (mediaKey) {
+      const up = await env.DB.prepare("SELECT kind, content_type FROM uploads WHERE r2_key = ? AND email = ? AND used = 0")
+        .bind(mediaKey, admin.email)
+        .first<{ kind: string; content_type: string }>();
+      const head = up && (up.kind === "video" || up.kind === "photo") ? await env.MEDIA.head(mediaKey) : null;
+      if (up && head && head.httpMetadata?.contentType?.toLowerCase() === up.content_type) {
+        await env.DB.batch([
+          env.DB.prepare("UPDATE nights SET invite_media_key = ?, invite_media_kind = ? WHERE id = ?").bind(mediaKey, up.kind, id),
+          env.DB.prepare("UPDATE uploads SET used = 1 WHERE r2_key = ?").bind(mediaKey),
+        ]);
+      }
+    }
     redirect(`/nights/${id}`);
   } catch (e) {
     if (e && typeof e === "object" && "digest" in e && String((e as { digest: string }).digest).startsWith("NEXT_REDIRECT")) throw e;

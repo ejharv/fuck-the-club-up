@@ -7,6 +7,9 @@ import "server-only";
  * statement checks and writes in one step).
  */
 export const MAX_PLUS_ONES_LIMIT = 5;
+/** "Unlimited" +1s is stored as this value; each guest is still capped at UNLIMITED_PER_GUEST. */
+export const UNLIMITED_PLUS_ONES = 99;
+export const UNLIMITED_PER_GUEST = 50;
 
 export type GuestCounts = { going: number; headcount: number; waitlist: number; maybe: number; capacity: number | null };
 

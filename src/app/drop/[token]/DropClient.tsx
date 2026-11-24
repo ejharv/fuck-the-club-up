@@ -135,7 +135,17 @@ function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null;
         className="field mt-2 min-h-12 sm:w-72"
         placeholder="Whatever you want to go by"
       />
-      {info.maxPlusOnes > 0 && (
+      {info.maxPlusOnes >= 99 && (
+        <div className="mt-4">
+          <span id="plus-label" className="block font-bold">Bringing anyone?</span>
+          <div className="mt-2 flex items-center gap-3" aria-labelledby="plus-label">
+            <button type="button" aria-label="One fewer" onClick={() => setPlus((p) => Math.max(0, p - 1))} disabled={plus === 0} className="grid h-12 w-12 place-items-center rounded-full border border-line text-2xl font-bold hover:border-maize disabled:opacity-40">−</button>
+            <span role="status" className="min-w-24 text-center text-lg font-bold">{plus === 0 ? "Just me" : `Me +${plus}`}</span>
+            <button type="button" aria-label="One more" onClick={() => setPlus((p) => Math.min(50, p + 1))} disabled={plus >= 50} className="grid h-12 w-12 place-items-center rounded-full border border-line text-2xl font-bold hover:border-maize disabled:opacity-40">+</button>
+          </div>
+        </div>
+      )}
+      {info.maxPlusOnes > 0 && info.maxPlusOnes < 99 && (
         <div className="mt-4">
           <span id="plus-label" className="block font-bold">Bringing anyone?</span>
           <div role="radiogroup" aria-labelledby="plus-label" className="mt-2 flex flex-wrap gap-2">
