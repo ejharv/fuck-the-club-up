@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { updatePost } from "@/app/actions";
+import { MediaPicker, pickerBusy, pickerFailed, type PickedItem } from "@/components/MediaPicker";
+import { MAX_FILES_PER_POST } from "@/lib/media-rules";
 import { HOUSE_RULES, SECTIONS } from "@/lib/sections";
 
 type Fields = {
@@ -21,11 +23,16 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
   const [section, setSection] = useState(post.section);
   const [items, setItems] = useState(media.map((m) => ({ ...m, remove: false })));
   const [cover, setCover] = useState<string | null>(media.find((m) => m.isCover)?.id ?? null);
+  const [adding, setAdding] = useState<PickedItem[]>([]);
+  const [newCover, setNewCover] = useState<string | null>(null);
+  const uploading = pickerBusy(adding);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submit(form: FormData) {
     setError(null);
+    if (uploading) return setError("Wait for the uploads to finish.");
+    if (pickerFailed(adding)) return setError("Remove the files that didn't upload, then save.");
     startTransition(async () => {
       const result = await updatePost({
         id: post.id,
@@ -41,6 +48,8 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
         media: items.filter((i) => !i.remove).map((i) => ({ id: i.id, caption: i.caption })),
         removeMediaIds: items.filter((i) => i.remove).map((i) => i.id),
         coverMediaId: cover,
+        addMedia: adding.map((i) => ({ key: i.key, url: i.url, caption: i.caption })),
+        coverNewKey: newCover,
       });
       if (result?.error) setError(result.error);
     });
@@ -102,7 +111,7 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
                   <button
                     type="button"
                     disabled={i.remove}
-                    onClick={() => setCover(i.id)}
+                    onClick={() => { setCover(i.id); setNewCover(null); }}
                     aria-pressed={cover === i.id}
                     aria-label="Use as cover photo"
                     className={`h-20 w-20 shrink-0 overflow-hidden rounded ${cover === i.id ? "ring-2 ring-maize" : ""}`}
@@ -139,6 +148,18 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
         </fieldset>
       )}
 
+      <fieldset className="rounded-md border border-dashed border-line p-4 sm:p-6">
+        <legend className="mono px-2 text-maize">Add photos, videos and music</legend>
+        <MediaPicker
+          items={adding}
+          setItems={setAdding}
+          coverKey={newCover}
+          setCoverKey={(k) => { setNewCover(k); setCover(null); }}
+          room={MAX_FILES_PER_POST - items.filter((i) => !i.remove).length}
+        />
+        <p className="mt-3 text-sm text-dim">Tap a new photo to make it the cover. New files are added at the end of the post.</p>
+      </fieldset>
+
       <label className="flex gap-3 rounded-md border border-line bg-night-2 p-4">
         <input type="checkbox" name="consent" value="yes" required className="mt-1 h-5 w-5 shrink-0 accent-[var(--maize)]" />
         <span>
@@ -148,8 +169,8 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
 
       {error && <p role="alert" className="rounded-md border border-pink/60 bg-pink/10 p-4">{error}</p>}
 
-      <button disabled={pending} className="rounded-full bg-maize px-8 py-4 text-lg font-bold text-night hover:bg-ink disabled:opacity-60">
-        {pending ? "Saving…" : "Save changes"}
+      <button disabled={pending || uploading} className="rounded-full bg-maize px-8 py-4 text-lg font-bold text-night hover:bg-ink disabled:opacity-60">
+        {pending ? "Saving…" : uploading ? "Uploading…" : "Save changes"}
       </button>
     </form>
   );

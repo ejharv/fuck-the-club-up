@@ -30,6 +30,11 @@ export default async function NightsPage() {
           New night
         </Link>
       </div>
+      <p className="mono mt-4 flex flex-wrap gap-4 text-maize">
+        <Link href="/crew" className="underline underline-offset-4">Crew and invites</Link>
+        <Link href="/site" className="underline underline-offset-4">Edit site</Link>
+        <Link href="/takedowns" className="underline underline-offset-4">Takedowns</Link>
+      </p>
       <p className="mt-3 max-w-xl text-dim">
         Each night gets one link: an invite before, a photo drop and everyone&apos;s story during and after, then the post.
       </p>

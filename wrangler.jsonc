@@ -11,6 +11,17 @@
   },
   "observability": { "enabled": true },
 
+  // Keep the workers.dev preview URL on (it turns off by default once routes exist).
+  "workers_dev": true,
+
+  // The real domain. Requires fucktheclubup.com to be an active zone in this
+  // Cloudflare account, with no leftover A/AAAA/CNAME records on @ or www;
+  // Cloudflare creates the DNS records and certificates.
+  "routes": [
+    { "pattern": "fucktheclubup.com", "custom_domain": true },
+    { "pattern": "www.fucktheclubup.com", "custom_domain": true }
+  ],
+
   // Posts, media rows and the crew list.
   "d1_databases": [
     {
@@ -58,7 +69,7 @@
     "MEDIA_PUBLIC_URL": "",
     "BEDROCK_REGION": "us-east-1",
     "BEDROCK_MODEL_ID": "us.anthropic.claude-sonnet-4-6",
-    // Cloudflare's always-pass test key; replace with the real site key.
-    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA"
+    // Public Turnstile site key (pairs with the TURNSTILE_SECRET_KEY secret).
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAGQBwIV3WcV8dw6u"
   }
 }

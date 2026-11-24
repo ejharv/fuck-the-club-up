@@ -25,6 +25,41 @@ export type NewPostInput = PostFieldsInput & {
   coverKey?: string;
 };
 
+/**
+ * Every file must be an upload this member made, actually present in R2, and
+ * still matching the type and size it was signed for. Links must be embeds we
+ * allow. Used by new posts and by adding media to an existing post.
+ */
+async function verifyNewMedia(
+  env: CloudflareEnv,
+  email: string,
+  items: Array<{ key?: string; url?: string; caption?: string }>,
+): Promise<{ media: MediaInsert[] } | { error: string }> {
+  const media: MediaInsert[] = [];
+  for (const item of items) {
+    const caption = clean(item.caption, 300);
+    if (item.url) {
+      const embed = toEmbed(item.url);
+      if (!embed) return { error: "Links must be YouTube, Spotify or SoundCloud." };
+      media.push({ kind: "embed", key: null, url: item.url.trim(), type: null, caption });
+      continue;
+    }
+    if (!item.key) return { error: "One of the files didn't upload. Remove it and try again." };
+    const upload = await env.DB.prepare("SELECT kind, content_type FROM uploads WHERE r2_key = ? AND email = ? AND used = 0")
+      .bind(item.key, email)
+      .first<{ kind: FileKind; content_type: string }>();
+    const head = upload ? await env.MEDIA.head(item.key) : null;
+    if (!upload || !head) return { error: "One of the files didn't upload. Remove it and try again." };
+    const actualType = head.httpMetadata?.contentType?.toLowerCase();
+    if (actualType !== upload.content_type || !ALLOWED_TYPES[upload.content_type] || head.size > MAX_BYTES[upload.kind]) {
+      await env.MEDIA.delete(item.key);
+      return { error: "One of the files didn't match what was uploaded. Remove it and try again." };
+    }
+    media.push({ kind: upload.kind, key: item.key, url: null, type: upload.content_type, caption });
+  }
+  return { media };
+}
+
 export async function createPost(input: NewPostInput): Promise<ActionResult> {
   let slug: string;
   try {
@@ -37,32 +72,9 @@ export async function createPost(input: NewPostInput): Promise<ActionResult> {
       return { error: `Posts can have up to ${MAX_FILES_PER_POST} photos, videos, tracks and links.` };
     }
 
-    // Every file must be an upload this member made, actually present in R2,
-    // and still matching the type and size it was signed for.
-    const media: MediaInsert[] = [];
-    for (const item of input.media) {
-      const caption = clean(item.caption, 300);
-      if (item.url) {
-        const embed = toEmbed(item.url);
-        if (!embed) return { error: "Links must be YouTube, Spotify or SoundCloud." };
-        media.push({ kind: "embed", key: null, url: item.url.trim(), type: null, caption });
-        continue;
-      }
-      if (!item.key) return { error: "One of the files didn't upload. Remove it and try again." };
-      const upload = await env.DB.prepare(
-        "SELECT kind, content_type FROM uploads WHERE r2_key = ? AND email = ? AND used = 0",
-      )
-        .bind(item.key, member.email)
-        .first<{ kind: FileKind; content_type: string }>();
-      const head = upload ? await env.MEDIA.head(item.key) : null;
-      if (!upload || !head) return { error: "One of the files didn't upload. Remove it and try again." };
-      const actualType = head.httpMetadata?.contentType?.toLowerCase();
-      if (actualType !== upload.content_type || !ALLOWED_TYPES[upload.content_type] || head.size > MAX_BYTES[upload.kind]) {
-        await env.MEDIA.delete(item.key);
-        return { error: "One of the files didn't match what was uploaded. Remove it and try again." };
-      }
-      media.push({ kind: upload.kind, key: item.key, url: null, type: upload.content_type, caption });
-    }
+    const verified = await verifyNewMedia(env, member.email, input.media);
+    if ("error" in verified) return verified;
+    const media = verified.media;
 
     const firstPhoto = media.find((m) => m.kind === "photo")?.key ?? null;
     const coverKey = media.some((m) => m.kind === "photo" && m.key === input.coverKey) ? input.coverKey! : firstPhoto;
@@ -102,15 +114,20 @@ export type EditPostInput = PostFieldsInput & {
   media: Array<{ id: string; caption?: string }>;
   removeMediaIds: string[];
   coverMediaId?: string | null;
+  /** New uploads (keys from /api/uploads) and links to add at the end. */
+  addMedia?: Array<{ key?: string; url?: string; caption?: string }>;
+  /** Use one of the new uploads as the cover. */
+  coverNewKey?: string | null;
 };
 
 export async function updatePost(input: EditPostInput): Promise<ActionResult> {
   let slug: string;
   try {
-    const { env, post } = await requirePostEditor(String(input.id));
+    const { env, post, member } = await requirePostEditor(String(input.id));
     slug = post.slug;
     const fields = validatePostFields(input);
     if ("error" in fields) return fields;
+    const adding = Array.isArray(input.addMedia) ? input.addMedia : [];
 
     const { results: existing } = await env.DB.prepare("SELECT id, kind, r2_key FROM media WHERE post_id = ?")
       .bind(post.id)
@@ -118,7 +135,18 @@ export async function updatePost(input: EditPostInput): Promise<ActionResult> {
     const byId = new Map(existing.map((m) => [m.id, m]));
     const remove = (input.removeMediaIds ?? []).filter((id) => byId.has(id));
     const keep = existing.filter((m) => !remove.includes(m.id));
-    const cover = keep.find((m) => m.id === input.coverMediaId && m.kind === "photo") ?? keep.find((m) => m.kind === "photo");
+    if (keep.length + adding.length > MAX_FILES_PER_POST) {
+      return { error: `Posts can have up to ${MAX_FILES_PER_POST} photos, videos, tracks and links.` };
+    }
+    const added = await verifyNewMedia(env, member.email, adding);
+    if ("error" in added) return added;
+    const newCover = added.media.find((m) => m.kind === "photo" && m.key === input.coverNewKey);
+    const coverKey =
+      newCover?.key ??
+      (keep.find((m) => m.id === input.coverMediaId && m.kind === "photo") ?? keep.find((m) => m.kind === "photo"))?.r2_key ??
+      added.media.find((m) => m.kind === "photo")?.key ??
+      null;
+    const maxPos = await env.DB.prepare("SELECT COALESCE(MAX(position), -1) AS p FROM media WHERE post_id = ?").bind(post.id).first<{ p: number }>();
 
     const now = new Date().toISOString();
     await env.DB.batch([
@@ -126,11 +154,19 @@ export async function updatePost(input: EditPostInput): Promise<ActionResult> {
         `UPDATE posts SET title = ?, dek = ?, section = ?, night = ?, night_of = ?, damage = ?, ride_home = ?, body = ?,
                           cover_key = ?, updated_at = ? WHERE id = ?`,
       ).bind(fields.title, fields.dek, fields.section, fields.night, fields.nightOf, fields.damage, fields.rideHome,
-        fields.body, cover?.r2_key ?? null, now, post.id),
+        fields.body, coverKey, now, post.id),
       ...(input.media ?? [])
         .filter((m) => byId.has(m.id) && !remove.includes(m.id))
         .map((m) => env.DB.prepare("UPDATE media SET caption = ? WHERE id = ? AND post_id = ?").bind(clean(m.caption, 300), m.id, post.id)),
       ...remove.map((id) => env.DB.prepare("DELETE FROM media WHERE id = ? AND post_id = ?").bind(id, post.id)),
+      ...added.media.map((m, i) =>
+        env.DB.prepare(
+          "INSERT INTO media (id, post_id, position, kind, r2_key, url, content_type, caption) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ).bind(crypto.randomUUID(), post.id, (maxPos?.p ?? -1) + 1 + i, m.kind, m.key, m.url, m.type, m.caption),
+      ),
+      ...added.media
+        .filter((m) => m.key)
+        .map((m) => env.DB.prepare("UPDATE uploads SET used = 1 WHERE r2_key = ?").bind(m.key)),
     ]);
     const keys = remove.map((id) => byId.get(id)!.r2_key).filter((k): k is string => Boolean(k));
     if (keys.length) await env.MEDIA.delete(keys);

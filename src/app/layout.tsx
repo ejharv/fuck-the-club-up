@@ -5,6 +5,7 @@ import { signOutAction } from "./actions";
 import { SECTIONS, SITE_URL } from "@/lib/sections";
 import { cf } from "@/lib/env";
 import { currentMember } from "@/lib/session";
+import { getSiteContent } from "@/lib/site-content";
 import "./globals.css";
 
 const archivo = Archivo({ variable: "--font-archivo", subsets: ["latin"], weight: ["400", "500", "700"], display: "swap" });
@@ -18,7 +19,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const member = await currentMember();
+  const [member, content] = await Promise.all([currentMember(), getSiteContent()]);
   const openTakedowns =
     member?.role === "admin"
       ? ((await (await cf()).DB.prepare("SELECT COUNT(*) AS n FROM takedown_requests WHERE status = 'open'").first<{ n: number }>())?.n ?? 0)
@@ -47,6 +48,9 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                       </Link>
                       <Link href="/crew" className="hidden hover:text-maize sm:inline">
                         Crew
+                      </Link>
+                      <Link href="/site" className="hidden hover:text-maize sm:inline">
+                        Site
                       </Link>
                       <Link href="/takedowns" className="hover:text-maize">
                         Takedowns
@@ -89,8 +93,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
         <div className="light-strip" aria-hidden />
         <main id="main">{children}</main>
         <footer className="mx-auto mt-24 max-w-6xl border-t border-line px-4 py-8 sm:px-6">
-          <p className="text-dim">Going out in Ann Arbor, written by the people who were there.</p>
-          <p className="mono mt-3 text-maize">No names without a yes · Nobody drives · Water between rounds</p>
+          {content.footerLine && <p className="text-dim">{content.footerLine}</p>}
+          {content.footerRules && <p className="mono mt-3 text-maize">{content.footerRules}</p>}
+          <p className="mono mt-4 flex gap-5 text-dim">
+            <Link href="/privacy" className="hover:text-ink">Privacy</Link>
+            <Link href="/terms" className="hover:text-ink">Terms</Link>
+          </p>
         </footer>
       </body>
     </html>
