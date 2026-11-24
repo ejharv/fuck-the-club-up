@@ -137,6 +137,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         guestInfo={{ maxPlusOnes: night.max_plus_ones, spotsLeft, waitlist: waitlistCount }}
         account={mine ?? null}
         me={me}
+        nightName={night.name}
         songs={songs}
         places={places}
         accountCount={accountCount?.n ?? 0}

@@ -44,7 +44,7 @@ export function NewNightForm() {
           </div>
           <div>
             <label htmlFor="plusOnes" className="mb-2 block font-bold">+1s per guest</label>
-            <select id="plusOnes" name="plusOnes" defaultValue="1" className="field">
+            <select id="plusOnes" name="plusOnes" defaultValue="0" className="field">
               <option value="0">None</option>
               <option value="1">Up to 1</option>
               <option value="2">Up to 2</option>

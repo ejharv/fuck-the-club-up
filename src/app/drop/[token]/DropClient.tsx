@@ -424,6 +424,37 @@ function GuestSongs({ token, songs }: { token: string; songs: GuestSong[] }) {
   );
 }
 
+/** Lets anyone pass the invite on: the phone's share sheet, or copy as a fallback. Always the plain invite link. */
+function ShareInvite({ token, name, rsvped }: { token: string; name: string; rsvped: boolean }) {
+  const [copied, setCopied] = useState(false);
+  async function share() {
+    const url = `${location.origin}/drop/${token}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `You're invited: ${name}`, text: `You're invited: ${name}`, url });
+        return;
+      }
+    } catch (e) {
+      if ((e as Error)?.name === "AbortError") return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      window.prompt("Copy the invite link:", url);
+    }
+  }
+  return (
+    <section aria-label="Share the invite" className="mt-6 flex flex-col items-start gap-2 rounded-md border border-line p-4 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-dim">{rsvped ? "Bringing people? Send them the invite so they can RSVP themselves." : "Know someone who should come? Send them the invite."}</p>
+      <button type="button" onClick={share} className="inline-flex min-h-12 shrink-0 items-center rounded-full bg-pink px-6 font-bold text-night hover:bg-ink">
+        {copied ? "Link copied" : "Share the invite"}
+      </button>
+    </section>
+  );
+}
+
 /** Keeps a guest's spot when the invite was opened inside Snapchat/Instagram etc. */
 function SaveSpot({ me }: { me: { path: string; ics: string; google: string } }) {
   const [copied, setCopied] = useState(false);
@@ -878,6 +909,7 @@ export function DropClient(props: {
   guestInfo: GuestInfo;
   account: { nickname: string; body: string } | null;
   me: { path: string; ics: string; google: string } | null;
+  nightName: string;
   songs: GuestSong[];
   places: { approved: Venue[]; mine: Array<{ id: string; name: string; url: string | null; kind: string }> };
   accountCount: number;
@@ -903,6 +935,7 @@ export function DropClient(props: {
     <>
       {canAct && !verified && <Turnstile token={token} siteKey={props.siteKey} phase={phase} />}
       {verified && phase === "invite" && <Rsvp token={token} current={props.rsvp} info={props.guestInfo} />}
+      {(phase === "invite" || phase === "live") && <ShareInvite token={token} name={props.nightName} rsvped={Boolean(props.rsvp)} />}
       {verified && canAct && props.me && <SaveSpot me={props.me} />}
       {verified && canAct && <GuestSongs token={token} songs={props.songs} />}
       {verified && canAct && phase !== "invite" && <GuestPlaces token={token} places={props.places} />}
