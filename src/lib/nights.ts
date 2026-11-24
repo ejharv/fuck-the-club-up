@@ -152,6 +152,34 @@ export async function isVerified(secret: string, nightId: string, device: string
   return safeEqual(sig, await hmacHex(secret, `${nightId}.${device}.${exp}`));
 }
 
+/**
+ * A guest's personal "my spot" pass: their device id plus a signature, so the
+ * same person can get back in from another browser (e.g. after opening the
+ * invite inside Snapchat). Stateless; whoever holds it acts as that guest.
+ */
+export async function mePass(secret: string, nightId: string, device: string): Promise<string> {
+  return `${device}.${(await hmacHex(secret, `me:${nightId}:${device}`)).slice(0, 32)}`;
+}
+
+export async function checkMePass(secret: string, nightId: string, pass: string): Promise<string | null> {
+  const [device, sig] = pass.split(".");
+  if (!device || !sig || !/^[a-f0-9-]{36}$/.test(device)) return null;
+  const want = (await hmacHex(secret, `me:${nightId}:${device}`)).slice(0, 32);
+  return safeEqual(sig, want) ? device : null;
+}
+
+/** True when another guest on this night already uses this name. */
+export async function nameTaken(DB: D1Database, nightId: string, device: string, name: string): Promise<boolean> {
+  const row = await DB.prepare(
+    `SELECT 1 FROM night_rsvps WHERE night_id = ?1 AND device_id != ?2 AND lower(trim(nickname)) = lower(trim(?3))
+     UNION ALL SELECT 1 FROM night_accounts WHERE night_id = ?1 AND device_id != ?2 AND lower(trim(nickname)) = lower(trim(?3))
+     LIMIT 1`,
+  )
+    .bind(nightId, device, name)
+    .first();
+  return Boolean(row);
+}
+
 /** Salted hash of the caller's IP, for rate limits and abuse checks. Never the raw IP. */
 export async function ipHash(secret: string): Promise<string> {
   const h = await headers();

@@ -7,7 +7,7 @@ import { cf } from "@/lib/env";
 import { mediaUrl } from "@/lib/media-url";
 import { requestOrigin } from "@/lib/origin";
 import { formatDay } from "@/lib/format";
-import { latestDraft, listAlbum, phaseOf } from "@/lib/nights";
+import { latestDraft, listAlbum, mePass, phaseOf } from "@/lib/nights";
 import { DropClient } from "./DropClient";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +85,20 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   }
 
   const myRsvp = rsvps.results.find((r) => r.device_id === device) ?? null;
+  let me: { path: string; ics: string; google: string } | null = null;
+  if (device && verified && (myRsvp || mine)) {
+    const pass = await mePass(env.AUTH_SECRET, night.id, device);
+    const path = `/drop/${token}/me/${pass}`;
+    const origin = await requestOrigin();
+    const g = (iso: string) => new Date(iso).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const google = new URL("https://calendar.google.com/calendar/render");
+    google.searchParams.set("action", "TEMPLATE");
+    google.searchParams.set("text", night.name);
+    google.searchParams.set("dates", `${g(night.opens_at)}/${g(night.closes_at)}`);
+    google.searchParams.set("details", `Your personal party link (don't share it, it signs in as you):\n${origin}${path}`);
+    if (night.location_text) google.searchParams.set("location", night.location_text);
+    me = { path, ics: `${path}/calendar.ics`, google: google.toString() };
+  }
   const going = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).map((r) => (r.plus_ones ? `${r.nickname} +${r.plus_ones}` : r.nickname));
   const maybe = rsvps.results.filter((r) => r.answer === "maybe").map((r) => r.nickname);
   const headcount = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).reduce((n, r) => n + 1 + r.plus_ones, 0);
@@ -109,6 +123,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         rsvp={myRsvp ? { nickname: myRsvp.nickname, answer: myRsvp.answer, plusOnes: myRsvp.plus_ones, waitlisted: Boolean(myRsvp.waitlisted) } : null}
         guestInfo={{ maxPlusOnes: night.max_plus_ones, spotsLeft, waitlist: waitlistCount }}
         account={mine ?? null}
+        me={me}
         accountCount={accountCount?.n ?? 0}
         album={album.map((u) => ({ key: u.r2_key, kind: u.kind, nickname: u.nickname }))}
         draft={

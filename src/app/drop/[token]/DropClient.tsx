@@ -189,6 +189,56 @@ function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null;
   );
 }
 
+/** Keeps a guest's spot when the invite was opened inside Snapchat/Instagram etc. */
+function SaveSpot({ me }: { me: { path: string; ics: string; google: string } }) {
+  const [copied, setCopied] = useState(false);
+  const [env, setEnv] = useState<{ inApp: boolean; ios: boolean; android: boolean; url: string }>({ inApp: false, ios: false, android: false, url: me.path });
+  useEffect(() => {
+    const ua = navigator.userAgent;
+    setEnv({
+      inApp: /Snapchat|Instagram|FBAN|FBAV|FB_IAB|TikTok|musical_ly|Twitter|LinkedInApp|Line\//i.test(ua),
+      ios: /iPhone|iPad|iPod/i.test(ua),
+      android: /Android/i.test(ua),
+      url: `${location.origin}${me.path}`,
+    });
+  }, [me.path]);
+  const openOut = env.ios
+    ? `x-safari-${env.url}`
+    : env.android
+      ? `intent://${env.url.replace(/^https?:\/\//, "")}#Intent;scheme=https;package=com.android.chrome;end`
+      : env.url;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(env.url);
+      setCopied(true);
+    } catch {
+      window.prompt("Copy your link:", env.url);
+    }
+  }
+  const btn = "inline-flex min-h-11 items-center justify-center rounded-full border border-ink px-4 text-sm font-bold hover:border-maize hover:text-maize";
+  return (
+    <section aria-labelledby="spot-h" className="mt-6 rounded-md border-2 border-dashed border-maize p-5">
+      <h2 id="spot-h" className="display text-2xl">Save your spot</h2>
+      <p className="mt-2 text-dim">
+        {env.inApp
+          ? "You opened this inside an app, and it might forget you. Save your personal link so you're ready on the night: it gets you back in as you, from any phone or browser."
+          : "Your personal link gets you back in as you, from any phone or browser. Save it so you're ready on the night."}
+      </p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <a href={me.ics} className={btn}>Add to calendar (iPhone/Outlook)</a>
+        <a href={me.google} target="_blank" rel="noopener noreferrer" className={btn}>Add to Google Calendar</a>
+        <button type="button" onClick={copy} className={btn}>{copied ? "Copied" : "Copy my link"}</button>
+        {env.inApp && (env.ios || env.android) && (
+          <a href={openOut} className={`${btn} border-maize bg-maize text-night hover:bg-ink hover:text-night`}>
+            Open in {env.ios ? "Safari" : "Chrome"}
+          </a>
+        )}
+      </div>
+      <p className="mt-3 text-xs text-dim">Don&apos;t share this one: it signs in as you. Share the regular invite instead.</p>
+    </section>
+  );
+}
+
 /** Small, capped Claude help for a guest's story. Suggestions only replace the text on "Use this". */
 function GuestClaude({ token, text, onUse }: { token: string; text: string; onUse: (t: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -401,8 +451,8 @@ function Uploader({ token }: { token: string }) {
   );
 }
 
-function Account({ token, account, count }: { token: string; account: { nickname: string; body: string } | null; count: number }) {
-  const [nickname, setNickname] = useState(account?.nickname ?? "");
+function Account({ token, account, defaultName, count }: { token: string; account: { nickname: string; body: string } | null; defaultName: string; count: number }) {
+  const [nickname, setNickname] = useState(account?.nickname ?? defaultName);
   const [body, setBody] = useState(account?.body ?? "");
   const { pending, msg, run } = useAction();
   return (
@@ -604,6 +654,7 @@ export function DropClient(props: {
   rsvp: MyRsvp | null;
   guestInfo: GuestInfo;
   account: { nickname: string; body: string } | null;
+  me: { path: string; ics: string; google: string } | null;
   accountCount: number;
   album: Array<{ key: string; kind: string; nickname: string | null }>;
   draft: Draft | null;
@@ -627,10 +678,11 @@ export function DropClient(props: {
     <>
       {canAct && !verified && <Turnstile token={token} siteKey={props.siteKey} phase={phase} />}
       {verified && phase === "invite" && <Rsvp token={token} current={props.rsvp} info={props.guestInfo} />}
+      {verified && canAct && props.me && <SaveSpot me={props.me} />}
       {verified && phase !== "invite" && <JumpNav links={jump} />}
       {verified && phase === "live" && <Uploader token={token} />}
       {showDraft && draftFirst && review}
-      {showAccount && <Account token={token} account={props.account} count={props.accountCount} />}
+      {showAccount && <Account token={token} account={props.account} defaultName={props.rsvp?.nickname ?? ""} count={props.accountCount} />}
       {showDraft && !draftFirst && review}
       {phase !== "invite" && <Album token={token} items={props.album} />}
       {/* Room so the sticky upload bar never covers the last thing on the page. */}

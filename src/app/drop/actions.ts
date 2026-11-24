@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { dropContext, requireVerified } from "@/lib/drop-context";
 import { clean } from "@/lib/post-fields";
 import { UNLIMITED_PER_GUEST, UNLIMITED_PLUS_ONES, promoteWaitlist, rsvpStatement } from "@/lib/guests";
-import { isReviewable, latestDraft, phaseOf } from "@/lib/nights";
+import { isReviewable, latestDraft, phaseOf, nameTaken } from "@/lib/nights";
 import { LIMITS } from "@/lib/synthesis";
 
 export type DropResult = { error: string } | { ok: true; waitlisted?: boolean } | undefined;
@@ -30,6 +30,9 @@ export async function rsvp(token: string, nickname: string, answer: string, plus
   if (plus < 0 || plus > allowed) {
     return { error: allowed ? `You can bring up to ${allowed}.` : "This one's no +1s." };
   }
+  if (await nameTaken(ctx.env.DB, ctx.night.id, ctx.device, name)) {
+    return { error: `Someone already RSVPed as "${name}". Add an initial or pick another nickname. If that's you on another phone, use your personal link.` };
+  }
   await rsvpStatement(ctx.env.DB, ctx.night.id, ctx.device, name, answer, plus).run();
   await promoteWaitlist(ctx.env.DB, ctx.night.id);
   const mine = await ctx.env.DB.prepare("SELECT waitlisted FROM night_rsvps WHERE night_id = ? AND device_id = ?")
@@ -49,6 +52,9 @@ export async function saveAccount(token: string, nickname: string, body: string)
   const text = clean(body, LIMITS.accountChars);
   if (!name) return { error: "Pick a nickname. It's the only name that shows up." };
   if (!text || text.length < 20) return { error: "Give us a little more than that. What actually happened?" };
+  if (await nameTaken(ctx.env.DB, ctx.night.id, ctx.device, name)) {
+    return { error: `"${name}" is already taken on this night. Pick another nickname, or use your personal link if that's you.` };
+  }
   await ctx.env.DB.prepare(
     `INSERT INTO night_accounts (night_id, device_id, nickname, body, updated_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (night_id, device_id) DO UPDATE SET nickname = excluded.nickname, body = excluded.body, updated_at = excluded.updated_at`,
