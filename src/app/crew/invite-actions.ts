@@ -13,14 +13,14 @@ export async function createInvite(_prev: InviteResult, form: FormData): Promise
   try {
     const admin = await requireAdmin();
     const role = form.get("role") === "admin" ? "admin" : "crew";
-    const email = String(form.get("email") ?? "").trim().toLowerCase();
+    // Crew invites never ask for an email: whoever opens the link claims it with their Google account.
+    const email = form.get("role") === "admin" ? String(form.get("email") ?? "").trim().toLowerCase() : "";
     const hours = Number(form.get("hours") ?? 72);
     const uses = Number(form.get("uses") ?? 1);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "That email doesn't look right." };
 
-    // Admin invites can't be forwarded: one Google account, one use, short life.
-    if (role === "admin" && !email) return { error: "Admin invites have to be locked to the Google email of the person you're promoting." };
-    const maxHours = role === "admin" ? INVITE_RULES.adminMaxHours : INVITE_RULES.crewMaxHours;
+    // Admin invites are always single use and short-lived; without an email, at most 24 hours.
+    const maxHours = role === "admin" ? (email ? INVITE_RULES.adminMaxHours : 24) : INVITE_RULES.crewMaxHours;
     if (!Number.isFinite(hours) || hours < 1 || hours > maxHours) return { error: `${role === "admin" ? "Admin" : "Crew"} invites can last up to ${maxHours} hours.` };
     const maxUses = role === "admin" ? 1 : Math.trunc(uses);
     if (maxUses < 1 || maxUses > INVITE_RULES.crewMaxUses) return { error: `Crew invites can be used 1 to ${INVITE_RULES.crewMaxUses} times.` };

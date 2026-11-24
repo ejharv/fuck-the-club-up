@@ -20,19 +20,25 @@ export function InviteForm() {
   return (
     <div className="mt-8 rounded-md border-2 border-dashed border-maize p-4 sm:p-5">
       <h2 className="display text-2xl">Send an invite link</h2>
-      <p className="mt-2 text-dim">The link previews with a fun image in the group chat. Opening it does nothing until they sign in with Google and claim it.</p>
+      <p className="mt-2 text-dim">
+        No need to ask for anyone&apos;s email. Send the link, they open it, sign in with Google and they&apos;re in. Opening it does nothing until they claim it.
+      </p>
       <form action={action} className="mt-5 grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="inv-role" className="mb-2 block font-bold">Access</label>
           <select id="inv-role" name="role" value={role} onChange={(e) => setRole(e.target.value as "crew" | "admin")} className="field">
-            <option value="crew">Crew: can post</option>
-            <option value="admin">Admin: runs nights and the crew</option>
+            <option value="crew">Crew: posts and hosts nights</option>
+            <option value="admin">Admin: runs the whole site</option>
           </select>
         </div>
-        <div>
-          <label htmlFor="inv-email" className="mb-2 block font-bold">Their Google email{role === "admin" ? "" : " (optional)"}</label>
-          <input id="inv-email" name="email" type="email" required={role === "admin"} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="email" className="field" placeholder="friend@gmail.com" />
-        </div>
+        {role === "admin" ? (
+          <div>
+            <label htmlFor="inv-email" className="mb-2 block font-bold">Lock it to their Google email <span className="font-normal text-dim">(optional, safest)</span></label>
+            <input id="inv-email" name="email" type="email" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} inputMode="email" className="field" placeholder="friend@gmail.com" />
+          </div>
+        ) : (
+          <div className="hidden sm:block" />
+        )}
         <div>
           <label htmlFor="inv-label" className="mb-2 block font-bold">Who it&apos;s for (just for you)</label>
           <input id="inv-label" name="label" maxLength={60} autoComplete="off" className="field" placeholder="Lefty" />
@@ -43,7 +49,7 @@ export function InviteForm() {
             <select id="inv-hours" name="hours" className="field" defaultValue={role === "admin" ? "24" : "72"} key={role}>
               <option value="1">1 hour</option>
               <option value="24">1 day</option>
-              <option value="48">2 days</option>
+              {role === "crew" && <option value="48">2 days</option>}
               {role === "crew" && <option value="72">3 days</option>}
               {role === "crew" && <option value="168">1 week</option>}
             </select>
@@ -54,7 +60,9 @@ export function InviteForm() {
           </div>
         </div>
         {role === "admin" && (
-          <p className="text-sm text-pink sm:col-span-2">Admin invites only work for that one Google account, once, within 2 days. Forwarding it to anyone else does nothing.</p>
+          <p className="text-sm text-pink sm:col-span-2">
+            Admin invites work once. Without an email, whoever claims it first becomes an admin, so send it straight to them, not to a group chat. With an email, only that Google account can use it.
+          </p>
         )}
         <button disabled={pending} className="min-h-12 rounded-full bg-maize px-6 font-bold text-night hover:bg-ink disabled:opacity-60 sm:col-span-2 sm:justify-self-start">
           {pending ? "Making it…" : "Make the link"}

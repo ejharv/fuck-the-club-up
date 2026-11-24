@@ -8,7 +8,7 @@ export const metadata = { title: "New night", robots: { index: false } };
 export default async function NewNight() {
   const me = await currentMember();
   if (!me) redirect("/login?next=/nights/new");
-  if (me.role !== "admin") redirect("/");
+
   return (
     <section className="mx-auto max-w-2xl px-4 pt-12 sm:px-6">
       <h1 className="display text-[clamp(3rem,9vw,5rem)]">New night</h1>

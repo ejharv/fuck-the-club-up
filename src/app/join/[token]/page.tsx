@@ -56,12 +56,48 @@ export default async function JoinPage({ params, searchParams }: Props) {
           <>You&apos;re on <span className="text-maize">the list.</span></>
         )}
       </h1>
-      <p className="mt-6 text-lg">
-        {admin
-          ? "This makes you an admin: you can start nights, send party links, review photos, and drop posts."
-          : "This puts you on the crew: you can sign in and post your own nights."}
+      <p className="mt-6 text-lg leading-snug">
+        Fuck The Club Up is our blog about nights out: the parties, the bars, the food after, and the stories that turned into lore, written by the people who were there.
       </p>
-      {inv.email && <p className="mt-3 text-dim">For the Google account {maskEmail(inv.email)}.</p>}
+
+      <section aria-labelledby="how-h" className="mt-8 rounded-md border border-line bg-night-2 p-4 sm:p-5">
+        <h2 id="how-h" className="mono text-pink">How a night works</h2>
+        <ol className="mt-3 space-y-3">
+          {[
+            ["One link", "Every night gets one link. Before: it's the invite, people RSVP with a nickname. During: it collects everyone's photos and videos."],
+            ["Everyone's side", "After, everyone writes their side of the story. It all gets stitched into one funny write-up."],
+            ["It drops", "The crew reads it, fixes it, approves it, and it goes up with the photos, the songs and the places."],
+          ].map(([t, d], i) => (
+            <li key={t} className="flex gap-3">
+              <span className="display grid h-8 w-8 shrink-0 place-items-center rounded-full bg-maize text-night">{i + 1}</span>
+              <span>
+                <strong className="block leading-snug">{t}</strong>
+                <span className="text-sm text-dim">{d}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section aria-labelledby="you-h" className="mt-6">
+        <h2 id="you-h" className="display text-2xl">{admin ? "As an admin you can" : "On the crew you can"}</h2>
+        <ul className="mt-3 list-disc space-y-1.5 pl-5">
+          <li>Host your own nights: send the invite, collect the photos and stories, drop the write-up.</li>
+          <li>Write posts about any night, with writing help if you want it.</li>
+          <li>Add co-hosts to your nights.</li>
+          {admin && <li>Run the whole site: the crew list, invites, site text and takedown requests, plus every night.</li>}
+        </ul>
+      </section>
+
+      <section aria-labelledby="claim-h" className="mt-6">
+        <h2 id="claim-h" className="display text-2xl">Claiming it</h2>
+        <p className="mt-2 text-dim">
+          Tap the button and sign in with Google. That Google account becomes your login here. We never see your password, and your email never shows on the site. Posts don&apos;t say who wrote them.
+        </p>
+        {inv.email && <p className="mt-2 text-dim">This one is for the Google account {maskEmail(inv.email)}.</p>}
+        {admin && !inv.email && <p className="mt-2 text-pink">This link works once. Don&apos;t forward it.</p>}
+      </section>
+
       <div className="mt-6 rounded-md border-2 border-dashed border-maize p-4 text-sm">
         <p className="mono text-maize">House rules</p>
         <p className="mt-2">No names without a yes · Nobody drives · Punch up · Water between rounds</p>

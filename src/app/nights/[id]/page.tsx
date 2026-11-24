@@ -8,7 +8,7 @@ import { mediaUrl } from "@/lib/media-url";
 import { cf } from "@/lib/env";
 import { formatDay } from "@/lib/format";
 import { getNight, latestDraft, parseVenues, phaseOf } from "@/lib/nights";
-import { nightRole } from "@/lib/hosting";
+import { canManageNight, nightRole } from "@/lib/hosting";
 import { signedInEmail } from "@/lib/session";
 import { LIMITS } from "@/lib/synthesis";
 import { NightAdmin } from "./NightAdmin";
@@ -119,7 +119,7 @@ export default async function NightAdminPage({
           rsvps.results.map(async (r) => ({ ...r, mePath: link ? `/drop/${link}/me/${await mePass(env.AUTH_SECRET, night.id, r.device_id)}` : null })),
         )}
         guestLimits={{ capacity: night.capacity }}
-        isAdmin={access.role === "admin"}
+        isAdmin={await canManageNight(night, access.email, access.role)}
         hosts={hosts.results.map((h) => ({ email: h.email, name: h.display_name ?? "" }))}
         me={access.email}
         guestSongs={guestSongs.results}

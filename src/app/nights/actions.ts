@@ -11,7 +11,8 @@ import { clean, validatePostFields, type PostFieldsInput } from "@/lib/post-fiel
 import { cleanSongs, type Song } from "@/lib/tracks";
 import { MAX_VENUES, cleanVenues, parseVenueJson, placeKey } from "@/lib/venues";
 import { requireNightAccess } from "@/lib/hosting";
-import { NotAllowed, requireAdmin } from "@/lib/session";
+import { NotAllowed, requireMember } from "@/lib/session";
+import { CREW_NIGHT_LIMIT, canManageNight, nightRole } from "@/lib/hosting";
 
 export type AdminResult = { error: string } | { ok: true; token?: string } | undefined;
 
@@ -46,8 +47,19 @@ function guestLimits(capacityRaw: unknown): { capacity: number | null; maxPlusOn
 
 export async function createNight(_prev: AdminResult, form: FormData): Promise<AdminResult> {
   try {
-    const admin = await requireAdmin();
+    // Any crew member can start a night (they become its host); crew get a cap on upcoming nights.
+    const admin = await requireMember();
     const env = await cf();
+    if (admin.role !== "admin") {
+      const open = await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM nights WHERE lower(created_by) = ? AND status NOT IN ('dropped') AND closes_at > ?",
+      )
+        .bind(admin.email.toLowerCase(), new Date().toISOString())
+        .first<{ n: number }>();
+      if ((open?.n ?? 0) >= CREW_NIGHT_LIMIT) {
+        return { error: `You've got ${CREW_NIGHT_LIMIT} nights going already. Wrap one up (or ask an admin) before starting another.` };
+      }
+    }
     const name = clean(form.get("name"), 100);
     const startsLocal = String(form.get("startsAt") ?? "");
     if (!name) return { error: "Name the night." };
@@ -103,12 +115,15 @@ async function adminNight(nightId: string) {
   return { env: await cf(), night, access };
 }
 
-/** Admins only (creating nights, managing hosts, deleting). */
+/** Admins, or the crew member who started the night (managing hosts, deleting). */
 async function ownerNight(nightId: string) {
-  await requireAdmin();
   const night = await getNight(String(nightId));
   if (!night) throw new NotAllowed("That night doesn't exist.");
-  return { env: await cf(), night };
+  const r = await nightRole(night.id);
+  if (!(await canManageNight(night, r?.email ?? null, r?.role ?? null))) {
+    throw new NotAllowed("Only admins and whoever started this night can do that.");
+  }
+  return { env: await cf(), night, email: r!.email, isAdmin: r!.role === "admin" };
 }
 
 export async function regenerateLink(nightId: string): Promise<AdminResult> {
@@ -350,11 +365,11 @@ export async function removeRsvp(nightId: string, deviceId: string): Promise<Adm
   }
 }
 
-/** Add a co-host by Google email. Admins only. */
+/** Add a co-host by Google email. Admins, or whoever started the night. */
 export async function addHost(nightId: string, emailRaw: string): Promise<AdminResult> {
   try {
-    const admin = await requireAdmin();
-    const { env, night } = await ownerNight(nightId);
+    const { env, night, email: by } = await ownerNight(nightId);
+    const admin = { email: by };
     const email = String(emailRaw ?? "").trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter the Google email they sign in with." };
     await env.DB.prepare("INSERT OR IGNORE INTO night_hosts (night_id, email, added_by, created_at) VALUES (?, ?, ?, ?)")
@@ -370,6 +385,7 @@ export async function addHost(nightId: string, emailRaw: string): Promise<AdminR
 export async function removeHost(nightId: string, email: string): Promise<AdminResult> {
   try {
     const { env, night } = await ownerNight(nightId);
+    if (String(email).toLowerCase() === night.created_by.toLowerCase()) return { error: "The person who started the night stays a host." };
     await env.DB.prepare("DELETE FROM night_hosts WHERE night_id = ? AND email = ?").bind(night.id, String(email).toLowerCase()).run();
     revalidatePath(`/nights/${night.id}`);
     return { ok: true };

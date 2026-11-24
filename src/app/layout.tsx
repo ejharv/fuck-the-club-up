@@ -50,11 +50,11 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                   <Link href="/new" className="ml-2 inline-flex min-h-11 items-center rounded-sm bg-maize px-3 text-night hover:bg-ink sm:ml-0 sm:mr-1">
                     New post
                   </Link>
+                  <Link href="/nights" className="tap hover:text-maize">
+                    Host
+                  </Link>
                   {member.role === "admin" && (
                     <>
-                      <Link href="/nights" className="tap hover:text-maize">
-                        Host
-                      </Link>
                       <Link href="/crew" className="tap hidden hover:text-maize sm:inline-flex">
                         Crew
                       </Link>

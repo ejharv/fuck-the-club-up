@@ -25,6 +25,15 @@ export async function requireNightAccess(nightId: string) {
   return r;
 }
 
+/** Admins, or the crew member who started this night: they can add/remove hosts and delete it. */
+export async function canManageNight(night: { created_by: string }, email: string | null, role: NightRole | null): Promise<boolean> {
+  if (role === "admin") return true;
+  return Boolean(email && night.created_by.toLowerCase() === email.toLowerCase());
+}
+
+/** Crew members can host up to this many upcoming nights at once (admins: no limit). */
+export const CREW_NIGHT_LIMIT = 3;
+
 /** Is this email a host of any night? (Lets non-crew hosts sign in and see the Host link.) */
 export async function isAnyHost(email: string | null | undefined): Promise<boolean> {
   if (!email) return false;

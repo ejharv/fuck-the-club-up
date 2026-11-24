@@ -28,7 +28,7 @@ export default async function CrewPage() {
     <section className="mx-auto max-w-3xl px-4 pt-10 sm:px-6">
       <h1 className="display text-[clamp(3rem,9vw,6rem)] text-ink">The list</h1>
       <p className="mt-4 text-dim">
-        Add a friend&apos;s Google email and they can sign in and post. Remove them and they lose access right away.
+        Crew can post and host their own nights (up to 3 going at once). The easiest way in is an invite link below: no emails needed. You can also add someone by their Google email. Remove anyone and they lose access right away.
       </p>
 
       <InviteForm />

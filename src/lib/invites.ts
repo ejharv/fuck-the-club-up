@@ -16,7 +16,7 @@ export type CrewInvite = {
 export const JOIN_COOKIE = "ftcu_join";
 
 export const INVITE_RULES = {
-  /** Admin invites: locked to an email, single use, 48 hours max. */
+  /** Admin invites: single use; 48 hours max when locked to an email, 24 without. */
   adminMaxHours: 48,
   crewMaxHours: 24 * 14,
   crewMaxUses: 25,

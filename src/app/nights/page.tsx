@@ -18,7 +18,8 @@ export default async function NightsPage() {
   if (!email) redirect("/login?next=/nights");
   const me = await currentMember();
   const isAdmin = me?.role === "admin";
-  if (!isAdmin && !(await isAnyHost(email))) redirect("/");
+  if (!me && !(await isAnyHost(email))) redirect("/");
+  const canCreate = Boolean(me);
   const env = await cf();
   const { results } = await env.DB.prepare(
     `SELECT n.*, (SELECT COUNT(*) FROM night_uploads u WHERE u.night_id = n.id AND u.uploaded = 1) AS files,
@@ -35,7 +36,7 @@ export default async function NightsPage() {
     <section className="mx-auto max-w-4xl px-4 pt-12 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="display text-[clamp(3rem,9vw,5.5rem)]">Nights</h1>
-        {isAdmin && <Link href="/nights/new" className="inline-flex min-h-12 items-center rounded-full bg-maize px-6 font-bold text-night hover:bg-ink">
+        {canCreate && <Link href="/nights/new" className="inline-flex min-h-12 items-center rounded-full bg-maize px-6 font-bold text-night hover:bg-ink">
           New night
         </Link>}
       </div>
@@ -78,7 +79,7 @@ export default async function NightsPage() {
           ))}
         </ul>
       ) : (
-        <p className="mt-10 text-dim">No nights yet. Start one and send the link to the group chat.</p>
+        <p className="mt-10 text-dim">{canCreate ? "No nights yet. Start one and send the link to the group chat." : "No nights yet."}</p>
       )}
     </section>
   );
