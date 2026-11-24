@@ -79,21 +79,21 @@ export function MediaPicker({
   return (
     <div>
       <div className="flex flex-wrap gap-3">
-        <label className="cursor-pointer rounded-full border border-ink px-5 py-2 font-bold hover:border-maize hover:text-maize focus-within:outline focus-within:outline-2 focus-within:outline-pink">
+        <label className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full border border-ink px-5 font-bold sm:w-auto hover:border-maize hover:text-maize focus-within:outline focus-within:outline-2 focus-within:outline-pink">
           Add files
           <input ref={input} type="file" multiple accept={ACCEPT_ATTR} className="sr-only" onChange={(e) => addFiles(e.target.files)} />
         </label>
       </div>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <label htmlFor="picker-link" className="sr-only">Music or video link</label>
-        <input id="picker-link" value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addLink())} className="field sm:flex-1" placeholder="Paste a Spotify, SoundCloud or YouTube link" />
-        <button type="button" onClick={addLink} className="rounded-full border border-ink px-5 py-2 font-bold hover:border-maize hover:text-maize">Add link</button>
+        <input id="picker-link" value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addLink())} inputMode="url" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="done" className="field min-w-0 sm:flex-1" placeholder="Paste a Spotify, SoundCloud or YouTube link" />
+        <button type="button" onClick={addLink} className="min-h-11 shrink-0 rounded-full border border-ink px-5 font-bold hover:border-maize hover:text-maize">Add link</button>
       </div>
       {linkError && <p role="alert" className="mt-2 text-sm text-pink">{linkError}</p>}
       {items.length > 0 && (
         <ul className="mt-4 space-y-3">
           {items.map((i) => (
-            <li key={i.id} className="flex gap-4 rounded-md bg-night-2 p-3">
+            <li key={i.id} className="flex gap-3 rounded-md bg-night-2 p-3 sm:gap-4">
               {i.preview ? (
                 <button
                   type="button"
@@ -117,10 +117,10 @@ export function MediaPicker({
                     <div className="h-full bg-maize transition-[width]" style={{ width: `${(i.progress ?? 0) * 100}%` }} />
                   </div>
                 ) : (
-                  <input value={i.caption} onChange={(e) => patch(i.id, { caption: e.target.value })} maxLength={300} aria-label="Caption" placeholder="Caption (optional)" className="field mt-2 py-2 text-sm" />
+                  <input value={i.caption} onChange={(e) => patch(i.id, { caption: e.target.value })} maxLength={300} aria-label="Caption" placeholder="Caption (optional)" enterKeyHint="done" className="field mt-2 py-2 text-base" />
                 )}
               </div>
-              <button type="button" onClick={() => setItems((l) => l.filter((x) => x.id !== i.id))} className="self-start text-sm text-dim underline underline-offset-4 hover:text-pink">Remove</button>
+              <button type="button" onClick={() => setItems((l) => l.filter((x) => x.id !== i.id))} className="-mr-1 -mt-3 inline-flex min-h-11 items-center self-start px-1 text-sm text-dim underline underline-offset-4 hover:text-pink">Remove</button>
             </li>
           ))}
         </ul>

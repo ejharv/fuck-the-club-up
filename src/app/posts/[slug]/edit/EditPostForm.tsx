@@ -56,7 +56,7 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
   }
 
   return (
-    <form action={submit} className="mt-8 space-y-6">
+    <form action={submit} className="mt-8 space-y-7">
       <div>
         <label htmlFor="section" className="mb-2 block font-bold">Section</label>
         <select id="section" name="section" value={section} onChange={(e) => setSection(e.target.value)} className="field">
@@ -67,14 +67,14 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
       </div>
       <div>
         <label htmlFor="title" className="mb-2 block font-bold">Title</label>
-        <input id="title" name="title" required maxLength={140} defaultValue={post.title} className="field text-xl" />
+        <input id="title" name="title" required maxLength={140} defaultValue={post.title} autoComplete="off" enterKeyHint="next" className="field text-xl" />
       </div>
       <div>
         <label htmlFor="dek" className="mb-2 block font-bold">Dek</label>
-        <input id="dek" name="dek" maxLength={200} defaultValue={post.dek} className="field" />
+        <input id="dek" name="dek" maxLength={200} defaultValue={post.dek} autoComplete="off" enterKeyHint="next" className="field" />
       </div>
 
-      <fieldset className="rounded-md border-2 border-dashed border-maize p-4 sm:p-5">
+      <fieldset className="min-w-0 rounded-md border-2 border-dashed border-maize p-4 sm:p-5">
         <legend className="mono px-2 text-maize">Wristband</legend>
         <div className="mb-4">
           <label htmlFor="nightOf" className="mb-2 block text-sm font-bold">When was the night?</label>
@@ -102,11 +102,11 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
       </div>
 
       {items.length > 0 && (
-        <fieldset className="rounded-md border border-dashed border-line p-4 sm:p-6">
+        <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">
           <legend className="mono px-2 text-maize">Photos, videos and music</legend>
           <ul className="space-y-4">
             {items.map((i) => (
-              <li key={i.id} className={`flex gap-4 rounded-md bg-night-2 p-3 ${i.remove ? "opacity-40" : ""}`}>
+              <li key={i.id} className={`flex gap-3 rounded-md bg-night-2 p-3 sm:gap-4 ${i.remove ? "opacity-40" : ""}`}>
                 {i.preview ? (
                   <button
                     type="button"
@@ -123,7 +123,7 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
                   <div className="mono grid h-20 w-20 shrink-0 place-items-center rounded bg-night text-maize">{i.kind}</div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-dim">{i.label}</p>
+                  <p className="truncate text-sm text-dim">{i.remove ? "Will be deleted on save" : i.label}{!i.remove && cover === i.id ? " · cover" : ""}</p>
                   <input
                     value={i.caption}
                     disabled={i.remove}
@@ -131,13 +131,14 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
                     maxLength={300}
                     aria-label="Caption"
                     placeholder="Caption (optional)"
-                    className="field mt-2 py-2 text-sm"
+                    enterKeyHint="done"
+                    className="field mt-2 py-2 text-base"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={() => setItems((l) => l.map((x) => (x.id === i.id ? { ...x, remove: !x.remove } : x)))}
-                  className="self-start text-sm text-dim underline underline-offset-4 hover:text-pink"
+                  className="-mr-1 -mt-3 inline-flex min-h-11 items-center self-start px-1 text-sm text-dim underline underline-offset-4 hover:text-pink"
                 >
                   {i.remove ? "Keep" : "Remove"}
                 </button>
@@ -148,7 +149,7 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
         </fieldset>
       )}
 
-      <fieldset className="rounded-md border border-dashed border-line p-4 sm:p-6">
+      <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">
         <legend className="mono px-2 text-maize">Add photos, videos and music</legend>
         <MediaPicker
           items={adding}
@@ -160,8 +161,8 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
         <p className="mt-3 text-sm text-dim">Tap a new photo to make it the cover. New files are added at the end of the post.</p>
       </fieldset>
 
-      <label className="flex gap-3 rounded-md border border-line bg-night-2 p-4">
-        <input type="checkbox" name="consent" value="yes" required className="mt-1 h-5 w-5 shrink-0 accent-[var(--maize)]" />
+      <label className="flex cursor-pointer gap-3 rounded-md border border-line bg-night-2 p-4">
+        <input type="checkbox" name="consent" value="yes" required className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />
         <span>
           <strong>{HOUSE_RULES[0].title}</strong> Everyone named, tagged or shown in this post said yes.
         </span>
@@ -169,9 +170,11 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
 
       {error && <p role="alert" className="rounded-md border border-pink/60 bg-pink/10 p-4">{error}</p>}
 
-      <button disabled={pending || uploading} className="rounded-full bg-maize px-8 py-4 text-lg font-bold text-night hover:bg-ink disabled:opacity-60">
-        {pending ? "Saving…" : uploading ? "Uploading…" : "Save changes"}
-      </button>
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-line bg-night/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:px-6">
+        <button disabled={pending || uploading} className="min-h-14 w-full rounded-full bg-maize px-8 text-lg font-bold text-night hover:bg-ink disabled:opacity-60 sm:w-auto">
+          {pending ? "Saving…" : uploading ? "Uploading…" : "Save changes"}
+        </button>
+      </div>
     </form>
   );
 }

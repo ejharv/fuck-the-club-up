@@ -26,28 +26,32 @@ export default async function NightsPage() {
     <section className="mx-auto max-w-4xl px-4 pt-12 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="display text-[clamp(3rem,9vw,5.5rem)]">Nights</h1>
-        <Link href="/nights/new" className="rounded-full bg-maize px-6 py-3 font-bold text-night hover:bg-ink">
+        <Link href="/nights/new" className="inline-flex min-h-12 items-center rounded-full bg-maize px-6 font-bold text-night hover:bg-ink">
           New night
         </Link>
       </div>
-      <p className="mono mt-4 flex flex-wrap gap-4 text-maize">
-        <Link href="/crew" className="underline underline-offset-4">Crew and invites</Link>
-        <Link href="/site" className="underline underline-offset-4">Edit site</Link>
-        <Link href="/takedowns" className="underline underline-offset-4">Takedowns</Link>
-      </p>
-      <p className="mt-3 max-w-xl text-dim">
+      <nav aria-label="Admin" className="mono mt-4 flex flex-wrap gap-x-2 text-maize">
+        <Link href="/crew" className="-ml-2 inline-flex min-h-11 items-center px-2 underline underline-offset-4">Crew and invites</Link>
+        <Link href="/site" className="inline-flex min-h-11 items-center px-2 underline underline-offset-4">Edit site</Link>
+        <Link href="/takedowns" className="inline-flex min-h-11 items-center px-2 underline underline-offset-4">Takedowns</Link>
+      </nav>
+      <p className="mt-2 max-w-xl text-dim">
         Each night gets one link: an invite before, a photo drop and everyone&apos;s story during and after, then the post.
       </p>
       {results.length ? (
-        <ul className="mt-10 border-t border-line">
+        <ul className="mt-8 border-t border-line">
           {results.map((n) => (
             <li key={n.id} className="border-b border-line">
-              <Link href={`/nights/${n.id}`} className="grid gap-1 py-5 hover:text-maize sm:grid-cols-[8rem_1fr_auto] sm:items-center sm:gap-6">
-                <span className="mono text-maize">{formatDay(n.night_of)}</span>
-                <span className="display text-2xl">{n.name}</span>
-                <span className="text-sm text-dim">
-                  {n.status === "reviewing" ? "Drop scheduled" : phaseLabel[phaseOf(n)]} · {n.going} going · {n.files} files · {n.accounts} accounts
+              <Link href={`/nights/${n.id}`} className="group grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 py-4 hover:text-maize sm:grid-cols-[8rem_1fr_auto_auto] sm:gap-x-6 sm:py-5">
+                <span className="mono col-start-1 text-maize">{formatDay(n.night_of)}</span>
+                <span className="display col-start-1 text-2xl sm:col-start-2 sm:row-start-1">{n.name}</span>
+                <span className="col-start-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-dim sm:col-start-3 sm:row-start-1">
+                  <span className={`mono rounded border px-1.5 py-0.5 ${phaseOf(n) === "after" && n.status !== "reviewing" ? "border-maize text-maize" : phaseOf(n) === "live" ? "border-pink text-pink" : "border-line text-dim"}`}>
+                    {n.status === "reviewing" ? "Drop scheduled" : phaseLabel[phaseOf(n)]}
+                  </span>
+                  <span>{n.going} going · {n.files} files · {n.accounts} accounts</span>
                 </span>
+                <span aria-hidden className="col-start-2 row-span-3 row-start-1 text-2xl text-dim group-hover:text-maize sm:col-start-4 sm:row-span-1">›</span>
               </Link>
             </li>
           ))}

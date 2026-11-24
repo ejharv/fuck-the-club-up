@@ -104,7 +104,7 @@ export function NewPostForm({ today }: { today: string }) {
   }
 
   return (
-    <form action={submit} className="mt-8 space-y-6">
+    <form action={submit} className="mt-8 space-y-7">
       <div>
         <label htmlFor="section" className="mb-2 block font-bold">Section</label>
         <select id="section" name="section" value={section} onChange={(e) => setSection(e.target.value)} className="field">
@@ -117,15 +117,15 @@ export function NewPostForm({ today }: { today: string }) {
 
       <div>
         <label htmlFor="title" className="mb-2 block font-bold">Title</label>
-        <input id="title" name="title" required maxLength={140} className="field text-xl" placeholder="The night the DJ played Mr. Brightside three times" />
+        <input id="title" name="title" required maxLength={140} autoComplete="off" enterKeyHint="next" className="field text-xl" placeholder="The night the DJ played Mr. Brightside three times" />
       </div>
 
       <div>
         <label htmlFor="dek" className="mb-2 block font-bold">Dek</label>
-        <input id="dek" name="dek" maxLength={200} className="field" placeholder="One line under the title, e.g. Three bars, one tow truck, zero regrets." />
+        <input id="dek" name="dek" maxLength={200} autoComplete="off" enterKeyHint="next" className="field" placeholder="One line under the title, e.g. Three bars, one tow truck, zero regrets." />
       </div>
 
-      <fieldset className="rounded-md border-2 border-dashed border-maize p-4 sm:p-5">
+      <fieldset className="min-w-0 rounded-md border-2 border-dashed border-maize p-4 sm:p-5">
         <legend className="mono px-2 text-maize">Wristband</legend>
         <div className="mb-4">
           <label htmlFor="nightOf" className="mb-2 block text-sm font-bold">When was the night?</label>
@@ -155,21 +155,21 @@ export function NewPostForm({ today }: { today: string }) {
         <textarea id="body" name="body" required rows={12} maxLength={60000} className="field leading-relaxed" placeholder="Start from the pregame. Short paragraphs, real details. Markdown works: **bold**, _italic_, ## headings, > quotes, lists." />
       </div>
 
-      <fieldset className="rounded-md border border-dashed border-line p-4 sm:p-6">
+      <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">
         <legend className="mono px-2 text-maize">Photos, videos and music</legend>
         <p className="text-sm text-dim">
           Photos up to 25 MB, videos up to 400 MB, audio up to 60 MB. Tap a photo to make it the cover.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
-          <label className="cursor-pointer rounded-full border border-ink px-5 py-2 font-bold hover:border-maize hover:text-pink focus-within:outline focus-within:outline-2 focus-within:outline-pink">
+          <label className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full border border-ink px-5 font-bold sm:w-auto hover:border-maize hover:text-pink focus-within:outline focus-within:outline-2 focus-within:outline-pink">
             Add files
             <input ref={fileInput} type="file" multiple accept={ACCEPT_ATTR} className="sr-only" onChange={(e) => addFiles(e.target.files)} />
           </label>
         </div>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <label htmlFor="link" className="sr-only">Music or video link</label>
-          <input id="link" value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addLink())} className="field sm:flex-1" placeholder="Paste a Spotify, SoundCloud or YouTube link" />
-          <button type="button" onClick={addLink} className="rounded-full border border-ink px-5 py-2 font-bold hover:border-maize hover:text-pink">
+          <input id="link" value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addLink())} inputMode="url" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="done" className="field min-w-0 sm:flex-1" placeholder="Paste a Spotify, SoundCloud or YouTube link" />
+          <button type="button" onClick={addLink} className="min-h-11 shrink-0 rounded-full border border-ink px-5 font-bold hover:border-maize hover:text-pink">
             Add link
           </button>
         </div>
@@ -178,7 +178,7 @@ export function NewPostForm({ today }: { today: string }) {
         {items.length > 0 && (
           <ul className="mt-6 space-y-4">
             {items.map((i) => (
-              <li key={i.id} className="flex gap-4 rounded-md bg-night-2 p-3">
+              <li key={i.id} className="flex gap-3 rounded-md bg-night-2 p-3 sm:gap-4">
                 {i.preview ? (
                   <button
                     type="button"
@@ -210,14 +210,15 @@ export function NewPostForm({ today }: { today: string }) {
                       maxLength={300}
                       aria-label="Caption"
                       placeholder="Caption (optional)"
-                      className="field mt-2 py-2 text-sm"
+                      enterKeyHint="done"
+                      className="field mt-2 py-2 text-base"
                     />
                   )}
                 </div>
                 <button
                   type="button"
                   onClick={() => setItems((list) => list.filter((x) => x.id !== i.id))}
-                  className="self-start text-sm text-dim underline underline-offset-4 hover:text-pink"
+                  className="-mr-1 -mt-3 inline-flex min-h-11 items-center self-start px-1 text-sm text-dim underline underline-offset-4 hover:text-pink"
                 >
                   Remove
                 </button>
@@ -227,8 +228,8 @@ export function NewPostForm({ today }: { today: string }) {
         )}
       </fieldset>
 
-      <label className="flex gap-3 rounded-md border border-line bg-night-2 p-4">
-        <input type="checkbox" name="consent" value="yes" required className="mt-1 h-5 w-5 shrink-0 accent-[var(--maize)]" />
+      <label className="flex cursor-pointer gap-3 rounded-md border border-line bg-night-2 p-4">
+        <input type="checkbox" name="consent" value="yes" required className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />
         <span>
           <strong>{HOUSE_RULES[0].title}</strong> Everyone named, tagged or shown in this post said yes. Anyone who didn&apos;t gets a nickname and stays out of the photos.
         </span>
@@ -236,9 +237,11 @@ export function NewPostForm({ today }: { today: string }) {
 
       {error && <p role="alert" className="rounded-md border border-pink/60 bg-pink/10 p-4">{error}</p>}
 
-      <button disabled={pending || uploading} className="rounded-full bg-maize px-8 py-4 text-lg font-bold text-night hover:bg-ink disabled:opacity-60">
-        {pending ? "Publishing…" : uploading ? "Uploading…" : "Publish post"}
-      </button>
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-line bg-night/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:-mx-6 sm:px-6">
+        <button disabled={pending || uploading} className="min-h-14 w-full rounded-full bg-maize px-8 text-lg font-bold text-night hover:bg-ink disabled:opacity-60 sm:w-auto">
+          {pending ? "Publishing…" : uploading ? "Uploading…" : "Publish post"}
+        </button>
+      </div>
     </form>
   );
 }
