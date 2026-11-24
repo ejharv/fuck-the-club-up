@@ -47,9 +47,9 @@ export default async function JoinPage({ params, searchParams }: Props) {
   const admin = inv.role === "admin";
   const wrongAccount = Boolean(email && !inviteFits(inv, email)) || error === "WrongAccount";
   return (
-    <section className="mx-auto max-w-2xl px-4 pt-14 sm:px-6">
+    <section className="mx-auto max-w-2xl px-4 pt-10 sm:px-6 sm:pt-14">
       <p className="mono text-pink">{admin ? "VIP access" : "Crew access"}</p>
-      <h1 className="display mt-4 text-[clamp(3rem,12vw,6.5rem)]">
+      <h1 className="display mt-4 break-words text-[clamp(2.75rem,12vw,6.5rem)]">
         {admin ? (
           <>You&apos;re running <span className="text-maize">the door.</span></>
         ) : (
@@ -73,7 +73,7 @@ export default async function JoinPage({ params, searchParams }: Props) {
             You&apos;re signed in with a different Google account than this invite is for. Sign out, then open the link again and pick the right account.
           </p>
           <form action={signOutAction} className="mt-4">
-            <button className="rounded-full border border-ink px-6 py-3 font-bold hover:border-maize hover:text-maize">Sign out</button>
+            <button className="inline-flex min-h-12 w-full items-center justify-center rounded-full border border-ink px-6 py-3 font-bold hover:border-maize hover:text-maize sm:w-auto">Sign out</button>
           </form>
         </div>
       ) : member && (member.role === "admin" || !admin) ? (
