@@ -14,8 +14,8 @@ export default async function TakedownPage({ searchParams }: { searchParams: Pro
   if (!found) notFound();
   const env = await cf();
   return (
-    <section className="mx-auto max-w-3xl px-4 pt-12 sm:px-6">
-      <h1 className="display text-[clamp(2.75rem,9vw,5rem)]">Want something taken down?</h1>
+    <section className="mx-auto max-w-3xl px-4 pt-10 sm:px-6 sm:pt-12">
+      <h1 className="display text-[clamp(2.5rem,11vw,5rem)]">Want something taken down?</h1>
       <p className="mt-4 text-lg">
         From <strong>{found.post.title}</strong>. No questions asked; an admin looks at every request. House rule 1: no names or faces without a yes.
       </p>

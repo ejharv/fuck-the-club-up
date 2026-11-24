@@ -21,21 +21,21 @@ export default async function Home() {
 
   return (
     <>
-      <section className="mx-auto max-w-6xl px-4 pb-16 pt-14 sm:px-6 sm:pt-20">
+      <section className="mx-auto max-w-6xl px-4 pb-12 pt-10 sm:px-6 sm:pb-16 sm:pt-20">
         {content.homeKicker && <p className="mono text-pink">{content.homeKicker}</p>}
-        <h1 className="display mt-5 text-[clamp(4rem,17vw,12.5rem)]">
+        <h1 className="display mt-4 text-[clamp(4rem,19vw,12.5rem)] sm:mt-5">
           <span className="block">Fuck</span>
           <span className="block">
             The <span className="text-maize">Club</span>
           </span>
           <span className="outlined block">Up</span>
         </h1>
-        {content.homeLede && <p className="mt-8 max-w-xl text-xl">{content.homeLede}</p>}
+        {content.homeLede && <p className="mt-6 max-w-xl text-lg leading-snug sm:mt-8 sm:text-xl">{content.homeLede}</p>}
       </section>
 
       {fresh.length > 0 && (
-        <section aria-labelledby="fresh" className="mx-auto mb-16 max-w-6xl px-4 sm:px-6">
-          <h2 id="fresh" className="display text-3xl text-pink">New this week</h2>
+        <section aria-labelledby="fresh" className="mx-auto mb-14 max-w-6xl px-4 sm:mb-16 sm:px-6">
+          <h2 id="fresh" className="display text-[2rem] text-pink sm:text-3xl">New this week</h2>
           <p className="mt-2 text-dim">Just posted, about nights from a while back.</p>
           <div className="mt-6">
             <PostGrid posts={fresh} mediaBase={env.MEDIA_PUBLIC_URL} />
@@ -45,7 +45,7 @@ export default async function Home() {
 
       <section aria-labelledby="latest" className="mx-auto max-w-6xl px-4 sm:px-6">
         <h2 id="latest" className="display text-4xl">Latest</h2>
-        <div className="mt-6">
+        <div className="mt-5 sm:mt-6">
           {posts.length ? (
             <PostGrid posts={posts} mediaBase={env.MEDIA_PUBLIC_URL} />
           ) : (
@@ -61,9 +61,9 @@ export default async function Home() {
         </div>
       </section>
 
-      <section aria-labelledby="sections" className="mx-auto mt-20 max-w-6xl px-4 sm:px-6">
+      <section aria-labelledby="sections" className="mx-auto mt-16 max-w-6xl px-4 sm:mt-20 sm:px-6">
         <h2 id="sections" className="display text-4xl">Sections</h2>
-        <div className="mt-6">
+        <div className="mt-5 sm:mt-6">
           <SectionsGrid sections={sections} />
         </div>
       </section>

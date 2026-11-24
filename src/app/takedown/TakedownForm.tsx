@@ -18,10 +18,10 @@ export function TakedownForm({ post, siteKey, media }: { post: string; siteKey: 
       {media.length > 0 && (
         <fieldset>
           <legend className="mb-3 font-bold">Which one? (optional)</legend>
-          <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
             {media.map((m) => (
               <li key={m.id}>
-                <button type="button" aria-pressed={picked === m.id} onClick={() => setPicked(picked === m.id ? "" : m.id)} className={`block w-full overflow-hidden rounded ${picked === m.id ? "ring-4 ring-pink" : ""}`}>
+                <button type="button" aria-pressed={picked === m.id} onClick={() => setPicked(picked === m.id ? "" : m.id)} className={`relative block w-full overflow-hidden rounded ${picked === m.id ? "ring-4 ring-pink" : "ring-1 ring-line hover:ring-maize"}`}>
                   {m.kind === "photo" ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={m.src} alt="" className="aspect-square w-full object-cover" />
@@ -40,11 +40,11 @@ export function TakedownForm({ post, siteKey, media }: { post: string; siteKey: 
       </div>
       <div>
         <label htmlFor="contact" className="mb-2 block font-bold">How to reach you (optional)</label>
-        <input id="contact" name="contact" maxLength={200} className="field" placeholder="Email or @handle, only if you want a reply" />
+        <input id="contact" name="contact" maxLength={200} className="field" placeholder="Email or @handle, if you want a reply" />
       </div>
       <div className="cf-turnstile" data-sitekey={siteKey} data-theme="dark" />
       {state && "error" in state && <p role="alert" className="rounded-md border border-pink/60 bg-pink/10 p-4">{state.error}</p>}
-      <button disabled={pending} className="rounded-full bg-maize px-8 py-4 text-lg font-bold text-night hover:bg-ink disabled:opacity-60">
+      <button disabled={pending} className="w-full rounded-full bg-maize px-8 py-4 text-lg font-bold text-night hover:bg-ink disabled:opacity-60 sm:w-auto">
         {pending ? "Sending…" : "Send request"}
       </button>
     </form>

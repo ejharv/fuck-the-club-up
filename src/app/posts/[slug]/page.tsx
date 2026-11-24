@@ -31,17 +31,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 function RemoveMedia({ id }: { id: string }) {
   return (
-    <form action={deleteMedia} className="mt-2">
+    <form action={deleteMedia}>
       <input type="hidden" name="mediaId" value={id} />
-      <button className="mono text-dim underline underline-offset-4 hover:text-pink">Remove this</button>
+      <button className="mono tap -ml-2 text-dim underline underline-offset-4 hover:text-pink">Remove this</button>
     </form>
   );
 }
 
-function MediaBlock({ item, base, canEdit }: { item: MediaRow; base: string | undefined; canEdit: boolean }) {
+function MediaBlock({ item, base, canEdit, wide }: { item: MediaRow; base: string | undefined; canEdit: boolean; wide?: boolean }) {
   const caption = (
     <>
-      {item.caption && <figcaption className="mt-2 text-sm text-dim">{item.caption}</figcaption>}
+      {item.caption && <figcaption className="mt-1.5 text-sm leading-snug text-dim">{item.caption}</figcaption>}
       {canEdit && <RemoveMedia id={item.id} />}
     </>
   );
@@ -49,7 +49,7 @@ function MediaBlock({ item, base, canEdit }: { item: MediaRow; base: string | un
     const embed = toEmbed(item.url);
     if (!embed) return null;
     return (
-      <figure className="sm:col-span-2">
+      <figure className="col-span-2">
         <iframe
           src={embed.src}
           title={item.caption ?? `${embed.provider} embed`}
@@ -66,7 +66,7 @@ function MediaBlock({ item, base, canEdit }: { item: MediaRow; base: string | un
   const src = mediaUrl(item.r2_key, base);
   if (item.kind === "video") {
     return (
-      <figure className="sm:col-span-2">
+      <figure className="col-span-2">
         <video src={src} controls playsInline preload="metadata" className="w-full rounded-md bg-black" />
         {caption}
       </figure>
@@ -74,7 +74,7 @@ function MediaBlock({ item, base, canEdit }: { item: MediaRow; base: string | un
   }
   if (item.kind === "audio") {
     return (
-      <figure className="rounded-md border border-line bg-night-2 p-4 sm:col-span-2">
+      <figure className="col-span-2 rounded-md border border-line bg-night-2 p-4">
         <p className="mono mb-3 text-maize">{item.caption ?? "Track from the night"}</p>
         <audio src={src} controls preload="none" className="w-full" />
         {canEdit && <RemoveMedia id={item.id} />}
@@ -82,9 +82,16 @@ function MediaBlock({ item, base, canEdit }: { item: MediaRow; base: string | un
     );
   }
   return (
-    <figure>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt={item.caption ?? "Photo from the night"} loading="lazy" className="w-full rounded-md" />
+    <figure className={`min-w-0 ${wide ? "col-span-2" : ""}`}>
+      <a href={src} target="_blank" rel="noopener" className="group block overflow-hidden rounded-md bg-night-2" aria-label={`Open full photo${item.caption ? `: ${item.caption}` : ""}`}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt={item.caption ?? "Photo from the night"}
+          loading="lazy"
+          className={`w-full object-cover transition-transform duration-300 motion-safe:group-hover:scale-[1.02] ${wide ? "aspect-[3/2] sm:aspect-video" : "aspect-square"}`}
+        />
+      </a>
       {caption}
     </figure>
   );
@@ -97,30 +104,33 @@ export default async function PostPage({ params }: Props) {
   const [env, member] = await Promise.all([cf(), currentMember()]);
   const section = sectionBySlug(post.section);
   const canEdit = Boolean(member && (member.email === post.author_email || member.role === "admin"));
+  // Photos sit in a 2-up grid; with an odd count the first one runs full width so nothing is left hanging.
+  const photos = media.filter((m) => m.kind === "photo" && m.r2_key);
+  const loneLeadPhoto = photos.length % 2 === 1 ? photos[0].id : null;
 
   return (
-    <article className="mx-auto max-w-6xl px-4 pt-12 sm:px-6">
+    <article className="mx-auto max-w-6xl px-4 pt-8 sm:px-6 sm:pt-12">
       {post.placeholder ? (
         <p className="mb-8 max-w-[65ch] rounded-md border border-pink/60 bg-pink/10 p-4">
           <PlaceholderBadge /> <span className="ml-2">This is a stand-in until it gets rewritten in the crew&apos;s own voice.</span>
         </p>
       ) : null}
-      <p className="mono">
-        <Link href={`/section/${post.section}`} className="text-maize hover:text-ink">
+      <p className="mono -my-3">
+        <Link href={`/section/${post.section}`} className="tap -ml-2 text-maize hover:text-ink">
           {section?.name ?? post.section}
         </Link>
       </p>
-      <h1 className="display mt-4 max-w-5xl text-[clamp(2.75rem,8vw,6.5rem)]">{post.title}</h1>
-      {post.dek && <p className="mt-6 max-w-[55ch] text-2xl leading-snug">{post.dek}</p>}
+      <h1 className="display mt-3 max-w-5xl text-[clamp(2.5rem,11.5vw,6.5rem)] sm:mt-4 md:text-[clamp(3.5rem,8vw,6.5rem)]">{post.title}</h1>
+      {post.dek && <p className="mt-4 max-w-[55ch] text-xl leading-snug sm:mt-6 sm:text-2xl">{post.dek}</p>}
       {canEdit && (
-        <p className="mt-4">
-          <Link href={`/posts/${post.slug}/edit`} className="mono text-maize underline underline-offset-4 hover:text-ink">
+        <p className="mt-2">
+          <Link href={`/posts/${post.slug}/edit`} className="mono tap -ml-2 text-maize underline underline-offset-4 hover:text-ink">
             Edit post
           </Link>
         </p>
       )}
 
-      <div className="mt-8 max-w-4xl">
+      <div className="mt-6 max-w-4xl sm:mt-8">
         <Wristband postedAt={post.published_at} nightOf={post.night_of} night={post.night} damage={post.damage} rideHome={post.ride_home} />
       </div>
 
@@ -129,16 +139,16 @@ export default async function PostPage({ params }: Props) {
       </div>
 
       {media.length > 0 && (
-        <section aria-label="Photos, videos and music" className="mt-16 grid max-w-4xl gap-6 sm:grid-cols-2">
+        <section aria-label="Photos, videos and music" className="mt-12 grid max-w-4xl grid-cols-2 gap-x-2 gap-y-4 sm:mt-16 sm:gap-x-4 sm:gap-y-6">
           {media.map((m) => (
-            <MediaBlock key={m.id} item={m} base={env.MEDIA_PUBLIC_URL} canEdit={canEdit} />
+            <MediaBlock key={m.id} item={m} base={env.MEDIA_PUBLIC_URL} canEdit={canEdit} wide={m.id === loneLeadPhoto} />
           ))}
         </section>
       )}
 
-      <p className="mt-16 border-t border-line pt-6 text-sm text-dim">
+      <p className="mt-12 border-t border-line pt-4 text-sm text-dim sm:mt-16 sm:pt-6">
         In something you want gone?{" "}
-        <Link href={`/takedown?post=${post.slug}`} className="underline underline-offset-4 hover:text-pink">
+        <Link href={`/takedown?post=${post.slug}`} className="relative underline underline-offset-4 after:absolute after:-inset-x-1 after:-inset-y-3 hover:text-pink">
           Ask for a takedown
         </Link>
         . No questions asked.
@@ -147,7 +157,7 @@ export default async function PostPage({ params }: Props) {
       {canEdit && (
         <form action={deletePost} className="mt-4">
           <input type="hidden" name="id" value={post.id} />
-          <button className="text-sm text-dim underline underline-offset-4 hover:text-pink">Delete this post and its uploads</button>
+          <button className="min-h-11 text-sm text-dim underline underline-offset-4 hover:text-pink">Delete this post and its uploads</button>
         </form>
       )}
     </article>

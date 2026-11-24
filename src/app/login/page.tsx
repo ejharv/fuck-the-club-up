@@ -18,9 +18,9 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
   const message = error ? (messages[error] ?? "Sign-in didn't go through. Try again.") : null;
 
   return (
-    <section className="mx-auto max-w-6xl px-4 pt-16 sm:px-6">
-      <h1 className="flyer max-w-3xl text-[clamp(3.5rem,11vw,8rem)] text-ink">Crew only past this point.</h1>
-      <p className="mt-6 max-w-xl text-lg text-dim">
+    <section className="mx-auto max-w-6xl px-4 pt-10 sm:px-6 sm:pt-16">
+      <h1 className="display max-w-3xl text-[clamp(3rem,13vw,8rem)] text-ink">Crew only past this point.</h1>
+      <p className="mt-5 max-w-xl text-lg text-dim sm:mt-6">
         Anyone can read. To post you need to be on the crew list. Sign in with the Google account you gave the admin.
       </p>
       {message && (
@@ -30,7 +30,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
       )}
       <form action={signInWithGoogle} className="mt-8">
         <input type="hidden" name="next" value={safePath(next, "/new")} />
-        <button className="rounded-full bg-ink px-6 py-3 font-bold text-night hover:bg-maize">
+        <button className="w-full rounded-full bg-ink px-6 py-3.5 font-bold text-night hover:bg-maize sm:w-auto">
           Continue with Google
         </button>
       </form>
