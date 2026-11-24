@@ -8,7 +8,9 @@ import { mediaUrl } from "@/lib/media-url";
 import { requestOrigin } from "@/lib/origin";
 import { formatDay } from "@/lib/format";
 import { latestDraft, listAlbum, mePass, phaseOf } from "@/lib/nights";
+import { parseVenueJson } from "@/lib/venues";
 import { DropClient } from "./DropClient";
+import { InAppNotice } from "@/components/InAppNotice";
 
 export const dynamic = "force-dynamic";
 /** The group-chat preview: the party invite image plus the night's name. */
@@ -85,6 +87,17 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   }
 
   const myRsvp = rsvps.results.find((r) => r.device_id === device) ?? null;
+  const songRows = await DB.prepare("SELECT id, device_id, title, artist, url FROM night_songs WHERE night_id = ? ORDER BY created_at")
+    .bind(night.id)
+    .all<{ id: string; device_id: string; title: string; artist: string | null; url: string | null }>();
+  const placeRows = await DB.prepare("SELECT id, name, url, kind FROM night_places WHERE night_id = ? AND device_id = ? ORDER BY created_at")
+    .bind(night.id, device ?? "")
+    .all<{ id: string; name: string; url: string | null; kind: string }>();
+  const places = {
+    approved: parseVenueJson(night.venues),
+    mine: placeRows.results,
+  };
+  const songs = songRows.results.map((s) => ({ id: s.id, title: s.title, artist: s.artist, mine: s.device_id === device }));
   let me: { path: string; ics: string; google: string } | null = null;
   if (device && verified && (myRsvp || mine)) {
     const pass = await mePass(env.AUTH_SECRET, night.id, device);
@@ -124,6 +137,8 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         guestInfo={{ maxPlusOnes: night.max_plus_ones, spotsLeft, waitlist: waitlistCount }}
         account={mine ?? null}
         me={me}
+        songs={songs}
+        places={places}
         accountCount={accountCount?.n ?? 0}
         album={album.map((u) => ({ key: u.r2_key, kind: u.kind, nickname: u.nickname }))}
         draft={
@@ -145,6 +160,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
 
   return (
     <article className="mx-auto max-w-3xl px-4 pt-8 sm:px-6 sm:pt-10">
+      <InAppNotice />
       <p className="mono text-pink">
         {phase === "invite" ? "You're invited" : phase === "live" ? "It's happening" : phase === "after" ? "The morning after" : "It dropped"}
       </p>
@@ -161,6 +177,26 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         </div>
       )}
       <p className="mt-4 text-lg leading-snug">{lede}</p>
+
+      {(phase === "invite" || phase === "live") && !(verified && myRsvp) && (
+        <section aria-labelledby="how-h" className="mt-6 rounded-md border border-line bg-night-2 p-4 sm:p-5">
+          <h2 id="how-h" className="mono text-pink">How this works</h2>
+          <ol className="mt-3 space-y-3">
+            {[
+              ["RSVP now", "Pick a name or nickname. No account, no app, no email."],
+              ["On the night, use this same link", "Drop your photos and videos and write your side of the story."],
+            ].map(([t, d], i) => (
+              <li key={t} className="flex gap-3">
+                <span className="display grid h-8 w-8 shrink-0 place-items-center rounded-full bg-maize text-night">{i + 1}</span>
+                <span>
+                  <strong className="block leading-snug">{t}</strong>
+                  <span className="text-sm text-dim">{d}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {phase === "invite" && (
         <dl className="mt-6 grid gap-3 rounded-md border-2 border-dashed border-maize p-4 sm:grid-cols-2 sm:gap-4 sm:p-5">

@@ -22,7 +22,7 @@ export async function collectionStatements(
   const tracks: TrackRow[] = [];
   const seen = new Set<string>();
   const add = (t: TrackRow) => {
-    const k = `${t.artist ?? ""}|${t.title}`.toLowerCase();
+    const k = t.url ? t.url : `${t.artist ?? ""}|${t.title}`.toLowerCase();
     if (seen.has(k)) return;
     seen.add(k);
     tracks.push(t);
@@ -32,7 +32,11 @@ export async function collectionStatements(
   const titles = await Promise.all(links.map((m) => linkTitle(m.url!)));
   links.forEach((m, i) => add({ title: m.caption || titles[i].title, artist: m.caption ? null : titles[i].artist, url: m.url, source: "link", media_id: m.id }));
   media.filter((m) => m.kind === "audio").forEach((m) => add({ title: m.caption || "Audio from the night", artist: null, url: null, source: "upload", media_id: m.id }));
-  cleanSongs(songs).forEach((s) => add({ title: s.title, artist: s.artist, url: null, source: "mentioned", media_id: null }));
+  const clean = cleanSongs(songs);
+  const pasted = clean.filter((s) => s.url && !links.some((m) => m.url === s.url));
+  const pastedTitles = await Promise.all(pasted.map((s) => (s.title ? null : linkTitle(s.url!))));
+  pasted.forEach((s, i) => add({ title: s.title || pastedTitles[i]!.title, artist: s.title ? s.artist : pastedTitles[i]!.artist, url: s.url!, source: "link", media_id: null }));
+  clean.filter((s) => !s.url).forEach((s) => add({ title: s.title, artist: s.artist, url: null, source: "mentioned", media_id: null }));
 
   return [
     DB.prepare("DELETE FROM post_venues WHERE post_id = ?").bind(postId),
@@ -42,7 +46,7 @@ export async function collectionStatements(
         postId, i, placeKey(v.name, v.url), v.name, v.url, v.kind,
       ),
     ),
-    ...tracks.slice(0, 60).map((t, i) =>
+    ...tracks.slice(0, 80).map((t, i) =>
       DB.prepare("INSERT INTO post_tracks (post_id, position, title, artist, url, source, media_id) VALUES (?, ?, ?, ?, ?, ?, ?)").bind(
         postId, i, t.title, t.artist, t.url, t.source, t.media_id,
       ),

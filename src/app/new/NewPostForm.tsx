@@ -8,6 +8,7 @@ import { PhoneUploadQR } from "@/components/PhoneUploadQR";
 import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
 import { MAX_FILES_PER_POST } from "@/lib/media-rules";
 import { HOUSE_RULES } from "@/lib/sections";
+import { linkPaste } from "@/lib/link-paste";
 import { songsToLines } from "@/lib/tracks";
 
 const FIELD_NAMES: Record<keyof AssistFields, string> = { title: "title", dek: "dek", night: "night", damage: "damage", rideHome: "rideHome", body: "body" };
@@ -107,7 +108,8 @@ export function NewPostForm({ today }: { today: string }) {
 
       <div>
         <label htmlFor="body" className="mb-2 block font-bold">The story</label>
-        <textarea id="body" name="body" required rows={12} maxLength={60000} className="field leading-relaxed" placeholder="Start from the pregame. Short paragraphs, real details. Rough notes are fine: Ask Claude can turn them into a post. Markdown works: **bold**, _italic_, ## headings, > quotes, lists." />
+        <textarea id="body" name="body" required rows={12} maxLength={60000} onPaste={linkPaste} className="field leading-relaxed" placeholder="Start from the pregame. Short paragraphs, real details. Rough notes are fine: Ask Claude can turn them into a post." />
+        <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link.</p>
       </div>
 
       <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">
@@ -127,8 +129,8 @@ export function NewPostForm({ today }: { today: string }) {
 
       <div>
         <label htmlFor="songs" className="mb-2 block font-bold">Songs of the night</label>
-        <textarea id="songs" value={songs} onChange={(e) => setSongs(e.target.value)} rows={4} className="field font-mono text-[16px] leading-relaxed sm:text-sm" placeholder={"The Killers - Mr. Brightside\nDancing Queen"} />
-        <p className="mt-1 text-sm text-dim">One per line. Links you added above are included automatically. They go on the Playlists tab.</p>
+        <textarea id="songs" value={songs} onChange={(e) => setSongs(e.target.value)} rows={4} className="field font-mono text-[16px] leading-relaxed sm:text-sm" placeholder={"Paste a Spotify, SoundCloud, YouTube or Apple Music link\nor type: The Killers - Mr. Brightside"} />
+        <p className="mt-1 text-sm text-dim">One per line. In Spotify or SoundCloud tap Share → Copy link, then paste it here. They go on the Playlists tab.</p>
       </div>
 
       <label className="flex cursor-pointer gap-3 rounded-md border border-line bg-night-2 p-4">

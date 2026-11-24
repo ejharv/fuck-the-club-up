@@ -9,7 +9,7 @@ import { cf } from "@/lib/env";
 import { defaultClosesAt, getNight, isStuckDrop, latestDraft } from "@/lib/nights";
 import { clean, validatePostFields, type PostFieldsInput } from "@/lib/post-fields";
 import { cleanSongs, type Song } from "@/lib/tracks";
-import { cleanVenues, parseVenueJson } from "@/lib/venues";
+import { MAX_VENUES, cleanVenues, parseVenueJson, placeKey } from "@/lib/venues";
 import { requireNightAccess } from "@/lib/hosting";
 import { NotAllowed, requireAdmin } from "@/lib/session";
 
@@ -218,6 +218,52 @@ export async function removeAccount(nightId: string, deviceId: string): Promise<
   try {
     const { env, night } = await adminNight(nightId);
     await env.DB.prepare("DELETE FROM night_accounts WHERE night_id = ? AND device_id = ?").bind(night.id, deviceId).run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Approve a guest's place: it joins the night's places (and the post when it drops). */
+export async function approveGuestPlace(nightId: string, id: string): Promise<AdminResult> {
+  try {
+    const { env, night } = await adminNight(nightId);
+    const p = await env.DB.prepare("SELECT name, url, kind FROM night_places WHERE id = ? AND night_id = ?")
+      .bind(String(id), night.id)
+      .first<{ name: string; url: string | null; kind: string }>();
+    if (!p) return { error: "That place is gone." };
+    const current = parseVenueJson(night.venues);
+    const key = placeKey(p.name, p.url);
+    if (!current.some((v) => placeKey(v.name, v.url) === key)) {
+      const list = cleanVenues([...current, p]);
+      if ("error" in list) return { error: list.error };
+      if (list.length === current.length) return { error: `A night can list up to ${MAX_VENUES} places. Remove one first.` };
+      await env.DB.prepare("UPDATE nights SET venues = ? WHERE id = ?").bind(JSON.stringify(list), night.id).run();
+    }
+    await env.DB.prepare("DELETE FROM night_places WHERE id = ?").bind(String(id)).run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function removeGuestPlaceAdmin(nightId: string, id: string): Promise<AdminResult> {
+  try {
+    const { env, night } = await adminNight(nightId);
+    await env.DB.prepare("DELETE FROM night_places WHERE id = ? AND night_id = ?").bind(String(id), night.id).run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function removeNightSong(nightId: string, id: string): Promise<AdminResult> {
+  try {
+    const { env, night } = await adminNight(nightId);
+    await env.DB.prepare("DELETE FROM night_songs WHERE id = ? AND night_id = ?").bind(String(id), night.id).run();
     revalidatePath(`/nights/${night.id}`);
     return { ok: true };
   } catch (e) {
@@ -471,6 +517,10 @@ async function dropFieldsFor(
   } catch {
     songs = [];
   }
+  const guestSongs = await env.DB.prepare("SELECT title, artist, url FROM night_songs WHERE night_id = ? ORDER BY created_at")
+    .bind(night.id)
+    .all<{ title: string; artist: string | null; url: string | null }>();
+  songs = cleanSongs([...songs, ...guestSongs.results.map((g) => ({ title: g.title, artist: g.artist }))]);
   const drop: DropFields = { ...fields, authorEmail: admin.email, venues: parseVenueJson(night.venues), songs };
   return { ok: true, env, night, drop };
 }

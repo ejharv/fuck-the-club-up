@@ -72,7 +72,7 @@ export function SiteEditor({ content, defaults, sections }: Props) {
 
       <fieldset className="min-w-0 space-y-5 rounded-md border border-line p-4 sm:p-6">
         <legend className="display px-2 text-2xl text-maize">About page</legend>
-        <Field id="aboutBody" label="What the blog is" hint="Markdown works: **bold**, _italic_, [links](https://…), blank line between paragraphs." value={c.aboutBody} def={defaults.aboutBody} onChange={(v) => set("aboutBody", v)} rows={8} max={8000} />
+        <Field id="aboutBody" label="What the blog is" hint="Paste links straight in. **bold** and _italic_ work; leave a blank line between paragraphs." value={c.aboutBody} def={defaults.aboutBody} onChange={(v) => set("aboutBody", v)} rows={8} max={8000} />
         <div>
           <div className="mb-2 flex items-baseline justify-between gap-3">
             <span className="font-bold">House rules</span>

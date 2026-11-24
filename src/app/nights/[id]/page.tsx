@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Markdown } from "@/components/Markdown";
 import { decryptText } from "@/lib/crypto";
+import { mePass } from "@/lib/nights";
 import { mediaUrl } from "@/lib/media-url";
 import { cf } from "@/lib/env";
 import { formatDay } from "@/lib/format";
@@ -49,6 +50,12 @@ export default async function NightAdminPage({
     night.post_id ? DB.prepare("SELECT slug FROM posts WHERE id = ?").bind(night.post_id).first<{ slug: string }>() : null,
     DB.prepare("SELECT email, display_name FROM night_hosts WHERE night_id = ? ORDER BY created_at").bind(id).all<{ email: string; display_name: string | null }>(),
   ]);
+  const guestPlaces = await DB.prepare("SELECT id, name, url, kind FROM night_places WHERE night_id = ? ORDER BY created_at")
+    .bind(id)
+    .all<{ id: string; name: string; url: string | null; kind: string }>();
+  const guestSongs = await DB.prepare("SELECT id, title, artist, NULL AS url FROM night_songs WHERE night_id = ? ORDER BY created_at")
+    .bind(id)
+    .all<{ id: string; title: string; artist: string | null; url: string | null }>();
 
   let review = { approvals: 0, notes: [] as Array<{ nickname: string | null; body: string }> };
   if (draft) {
@@ -107,11 +114,15 @@ export default async function NightAdminPage({
         freshLink={link ?? null}
         uploads={uploads.results.map((u) => ({ ...u, src: `/api/nights/${id}/file/${u.r2_key}` }))}
         accounts={accounts.results}
-        rsvps={rsvps.results}
+        rsvps={await Promise.all(
+          rsvps.results.map(async (r) => ({ ...r, mePath: link ? `/drop/${link}/me/${await mePass(env.AUTH_SECRET, night.id, r.device_id)}` : null })),
+        )}
         guestLimits={{ capacity: night.capacity, maxPlusOnes: night.max_plus_ones }}
         isAdmin={access.role === "admin"}
         hosts={hosts.results.map((h) => ({ email: h.email, name: h.display_name ?? "" }))}
         me={access.email}
+        guestSongs={guestSongs.results}
+        guestPlaces={guestPlaces.results}
         draft={draft}
         draftBody={draft ? <Markdown>{draft.body}</Markdown> : null}
         review={review}

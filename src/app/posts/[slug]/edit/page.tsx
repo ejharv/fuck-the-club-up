@@ -30,7 +30,7 @@ export default async function EditPost({ params }: { params: Promise<{ slug: str
       <h1 className="display mt-1 text-[clamp(2.5rem,8vw,4.5rem)]">Edit post</h1>
       <EditPostForm
         venues={(await postVenues(post.id)).map((v) => ({ name: v.name, url: v.url ?? "", kind: v.kind }))}
-        songsText={songsToLines((await postSongs(post.id)).filter((t) => t.source === "mentioned"))}
+        songsText={songsToLines((await postSongs(post.id)).filter((t) => t.source === "mentioned" || (t.source === "link" && !t.media_id)))}
         today={todayInDetroit()}
         post={{
           id: post.id,

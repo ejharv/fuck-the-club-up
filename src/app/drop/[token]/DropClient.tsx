@@ -2,7 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
-import { addNote, rsvp, saveAccount, setApproval } from "@/app/drop/actions";
+import { soundcloudSearch, spotifySearch } from "@/lib/tracks";
+import { browserEnv, browserName, openOutHref, type BrowserEnv } from "@/lib/in-app";
+import { linkDomain, type Venue } from "@/lib/venues";
+import { addNote, rsvp, saveAccount, setApproval, addGuestSongs, removeGuestSong, addGuestPlace, removeGuestPlace } from "@/app/drop/actions";
 import { ACCEPT_ATTR, ALLOWED_TYPES } from "@/lib/media-rules";
 import type { Phase } from "@/lib/nights";
 import { putWithProgress, scrubPhoto } from "@/lib/scrub-photo";
@@ -34,32 +37,57 @@ function Turnstile({ token, siteKey, phase }: { token: string; siteKey: string; 
   const box = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [stuck, setStuck] = useState(false);
+  const [env, setEnv] = useState<BrowserEnv | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => setEnv(browserEnv()), []);
   useEffect(() => {
+    // If the check hasn't shown up or finished in 10s (common in some in-app browsers), say so.
+    setStuck(false);
+    const t = setTimeout(() => {
+      // Turnstile draws into a shadow root, so check that it loaded and drew something at all.
+      if (!window.turnstile || !box.current?.childElementCount) setStuck(true);
+    }, 10000);
     const id = "cf-turnstile-script";
     const render = () => {
       if (!box.current || !window.turnstile || box.current.childElementCount) return;
       window.turnstile.render(box.current, {
         sitekey: siteKey,
         theme: "dark",
+        "error-callback": () => setStuck(true),
+        "timeout-callback": () => setStuck(true),
         callback: async (t: string) => {
+          setStuck(false);
           const res = await fetch(`/api/drop/${token}/verify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ turnstile: t }) });
           if (res.ok) router.refresh();
           else setError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? "Couldn't verify. Reload and try again.");
         },
       });
     };
-    if (window.turnstile) return render();
+    if (window.turnstile) {
+      render();
+      return () => clearTimeout(t);
+    }
     let s = document.getElementById(id) as HTMLScriptElement | null;
     if (!s) {
       s = document.createElement("script");
       s.id = id;
       s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
       s.async = true;
+      s.addEventListener("error", () => setStuck(true));
       document.head.appendChild(s);
     }
     s.addEventListener("load", render);
-    return () => s?.removeEventListener("load", render);
-  }, [token, siteKey, router]);
+    return () => {
+      clearTimeout(t);
+      s?.removeEventListener("load", render);
+    };
+  }, [token, siteKey, router, attempt]);
+  const retry = () => {
+    if (box.current) box.current.innerHTML = "";
+    setError(null);
+    setAttempt((a) => a + 1);
+  };
   const unlocks =
     phase === "invite" ? "then you can RSVP." : phase === "live" ? "then you can drop photos and tell your side." : "then you can read the draft and add yours.";
   return (
@@ -69,6 +97,23 @@ function Turnstile({ token, siteKey, phase }: { token: string; siteKey: string; 
       <p className="mt-1 text-sm text-dim">No sign-up, no name. Your phone just remembers you for this night.</p>
       <div ref={box} className="mt-4 min-h-[65px] max-w-full overflow-hidden" />
       {error && <p role="alert" className="mt-2 text-pink">{error}</p>}
+      {stuck && (
+        <div role="alert" className="mt-3 rounded border border-pink/60 bg-pink/10 p-3">
+          <p className="font-bold">The check isn&apos;t loading{env?.inApp ? ` inside ${env.inApp}` : ""}.</p>
+          <p className="mt-1 text-sm text-dim">
+            {env?.inApp ? `Open the link in ${browserName(env)} and it'll work. ` : "Check your connection. "}
+            Or tap ••• → &quot;Open in browser&quot;.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {env && (env.ios || env.android) && (
+              <a href={openOutHref(location.href.split("#")[0], env)} className="inline-flex min-h-11 items-center rounded-full bg-maize px-5 font-bold text-night">
+                Open in {browserName(env)}
+              </a>
+            )}
+            <button type="button" onClick={retry} className="inline-flex min-h-11 items-center rounded-full border border-ink px-4 font-bold">Try again</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -189,24 +234,136 @@ function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null;
   );
 }
 
+/** Guests suggest places with an optional website. Links only show once a host approves them. */
+function GuestPlaces({ token, places }: { token: string; places: { approved: Venue[]; mine: Array<{ id: string; name: string; url: string | null; kind: string }> } }) {
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const [kind, setKind] = useState("party");
+  const { pending, msg, run } = useAction();
+  return (
+    <section id="places" aria-labelledby="places-h" className="mt-10 scroll-mt-4">
+      <h2 id="places-h" className="display text-3xl">Where we went</h2>
+      <p className="mt-2 text-dim">Add the bars, parties and food spots. A host checks each one before it goes on the post and the Places tab.</p>
+      {places.approved.length > 0 && (
+        <ul className="mt-3 space-y-1">
+          {places.approved.map((v, i) => (
+            <li key={i}>
+              {v.url ? (
+                <a href={v.url} target="_blank" rel="noopener noreferrer nofollow ugc" className="font-bold underline underline-offset-4 hover:text-maize">{v.name}</a>
+              ) : (
+                <strong>{v.name}</strong>
+              )}
+              {v.url && <span className="mono text-xs text-dim"> {linkDomain(v.url)}</span>}
+              <span className="mono text-xs text-dim"> · {v.kind === "eat" ? "Eat" : "Party"}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form
+        className="mt-4 space-y-2 rounded-md border border-line p-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(async () => {
+            const r = await addGuestPlace(token, name, url, kind);
+            if (r && "ok" in r) { setName(""); setUrl(""); }
+            return r;
+          }, "Added. A host will check it.");
+        }}
+      >
+        <label htmlFor="place-name" className="block text-sm font-bold">Place</label>
+        <input id="place-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoComplete="off" placeholder="Rick's" className="field" />
+        <label htmlFor="place-url" className="block text-sm font-bold">Website (optional)</label>
+        <input id="place-url" value={url} onChange={(e) => setUrl(e.target.value)} maxLength={300} type="text" inputMode="url" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="rickscafe.com" className="field" />
+        <div role="radiogroup" aria-label="Kind of place" className="flex gap-2 pt-1">
+          {[["party", "Party"], ["eat", "Eat"]].map(([v, l]) => (
+            <button key={v} type="button" role="radio" aria-checked={kind === v} onClick={() => setKind(v)} className={`min-h-11 rounded-full border px-5 font-bold ${kind === v ? "border-maize bg-maize text-night" : "border-ink hover:border-maize"}`}>{l}</button>
+          ))}
+          <button disabled={pending || !name.trim()} className="ml-auto min-h-11 rounded-full bg-maize px-5 font-bold text-night hover:bg-ink disabled:opacity-60">{pending ? "Adding…" : "Add place"}</button>
+        </div>
+        {msg && <p role="status" className={`text-sm ${msg.ok ? "text-maize" : "text-pink"}`}>{msg.text}</p>}
+      </form>
+      {places.mine.length > 0 && (
+        <ul className="mt-3 divide-y divide-line rounded border border-line">
+          {places.mine.map((p) => (
+            <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span className="min-w-0 truncate"><strong>{p.name}</strong> <span className="text-sm text-dim">waiting for a host{p.url ? ` · ${linkDomain(p.url)}` : ""}</span></span>
+              <button type="button" disabled={pending} onClick={() => run(() => removeGuestPlace(token, p.id), "Removed.")} className="-mr-2 inline-flex min-h-11 shrink-0 items-center px-2 text-sm text-dim underline hover:text-pink">Remove</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+type GuestSong = { id: string; title: string; artist: string | null; mine: boolean };
+
+/** Guests type songs for the night's playlist; the Spotify/SoundCloud links are built here, never typed. */
+function GuestSongs({ token, songs }: { token: string; songs: GuestSong[] }) {
+  const [text, setText] = useState("");
+  const { pending, msg, run } = useAction();
+  return (
+    <section id="songs" aria-labelledby="songs-h" className="mt-10 scroll-mt-4">
+      <h2 id="songs-h" className="display text-3xl">Songs of the night</h2>
+      <p className="mt-2 text-dim">
+        Type what played: <strong className="text-ink">Artist - Song</strong>. Each one gets Spotify and SoundCloud buttons, and they end up on the post&apos;s playlist.
+      </p>
+      <form
+        className="mt-3 flex flex-col gap-2 sm:flex-row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(async () => {
+            const r = await addGuestSongs(token, text);
+            if (r && "ok" in r) setText("");
+            return r;
+          }, "Added.");
+        }}
+      >
+        <label htmlFor="song-in" className="sr-only">Artist - Song</label>
+        <input
+          id="song-in"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="The Killers - Mr. Brightside"
+          autoComplete="off"
+          enterKeyHint="send"
+          maxLength={200}
+          className="field sm:flex-1"
+        />
+        <button disabled={pending || !text.trim()} className="min-h-12 rounded-full bg-maize px-6 font-bold text-night hover:bg-ink disabled:opacity-60">
+          {pending ? "Adding…" : "Add song"}
+        </button>
+      </form>
+      {msg && <p role="status" className={`mt-2 text-sm ${msg.ok ? "text-maize" : "text-pink"}`}>{msg.text}</p>}
+      {songs.length > 0 && (
+        <ol className="mt-4 divide-y divide-line rounded border border-line">
+          {songs.map((s) => (
+            <li key={s.id} className="flex items-center justify-between gap-3 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate">
+                <strong>{s.title}</strong>
+                {s.artist && <span className="text-dim"> · {s.artist}</span>}
+              </span>
+              <a href={spotifySearch(s)} target="_blank" rel="noopener noreferrer" className="mono inline-flex min-h-11 shrink-0 items-center px-1 text-xs text-dim hover:text-maize">Spotify</a>
+              <a href={soundcloudSearch(s)} target="_blank" rel="noopener noreferrer" className="mono inline-flex min-h-11 shrink-0 items-center px-1 text-xs text-dim hover:text-maize">SoundCloud</a>
+              {s.mine && (
+                <button type="button" disabled={pending} onClick={() => run(() => removeGuestSong(token, s.id), "Removed.")} className="-mr-2 inline-flex min-h-11 shrink-0 items-center px-2 text-sm text-dim underline hover:text-pink">
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  );
+}
+
 /** Keeps a guest's spot when the invite was opened inside Snapchat/Instagram etc. */
 function SaveSpot({ me }: { me: { path: string; ics: string; google: string } }) {
   const [copied, setCopied] = useState(false);
-  const [env, setEnv] = useState<{ inApp: boolean; ios: boolean; android: boolean; url: string }>({ inApp: false, ios: false, android: false, url: me.path });
-  useEffect(() => {
-    const ua = navigator.userAgent;
-    setEnv({
-      inApp: /Snapchat|Instagram|FBAN|FBAV|FB_IAB|TikTok|musical_ly|Twitter|LinkedInApp|Line\//i.test(ua),
-      ios: /iPhone|iPad|iPod/i.test(ua),
-      android: /Android/i.test(ua),
-      url: `${location.origin}${me.path}`,
-    });
-  }, [me.path]);
-  const openOut = env.ios
-    ? `x-safari-${env.url}`
-    : env.android
-      ? `intent://${env.url.replace(/^https?:\/\//, "")}#Intent;scheme=https;package=com.android.chrome;end`
-      : env.url;
+  const [env, setEnv] = useState<BrowserEnv & { url: string }>({ inApp: null, ios: false, android: false, url: me.path });
+  useEffect(() => setEnv({ ...browserEnv(), url: `${location.origin}${me.path}` }), [me.path]);
+  const openOut = openOutHref(env.url, env);
   async function copy() {
     try {
       await navigator.clipboard.writeText(env.url);
@@ -221,7 +378,7 @@ function SaveSpot({ me }: { me: { path: string; ics: string; google: string } })
       <h2 id="spot-h" className="display text-2xl">Save your spot</h2>
       <p className="mt-2 text-dim">
         {env.inApp
-          ? "You opened this inside an app, and it might forget you. Save your personal link so you're ready on the night: it gets you back in as you, from any phone or browser."
+          ? "Apps like Snapchat don't always keep you signed in. Save your personal link so you're ready on the night: it gets you back in as you, from any phone or browser."
           : "Your personal link gets you back in as you, from any phone or browser. Save it so you're ready on the night."}
       </p>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -230,7 +387,7 @@ function SaveSpot({ me }: { me: { path: string; ics: string; google: string } })
         <button type="button" onClick={copy} className={btn}>{copied ? "Copied" : "Copy my link"}</button>
         {env.inApp && (env.ios || env.android) && (
           <a href={openOut} className={`${btn} border-maize bg-maize text-night hover:bg-ink hover:text-night`}>
-            Open in {env.ios ? "Safari" : "Chrome"}
+            Open in {browserName(env)}
           </a>
         )}
       </div>
@@ -655,6 +812,8 @@ export function DropClient(props: {
   guestInfo: GuestInfo;
   account: { nickname: string; body: string } | null;
   me: { path: string; ics: string; google: string } | null;
+  songs: GuestSong[];
+  places: { approved: Venue[]; mine: Array<{ id: string; name: string; url: string | null; kind: string }> };
   accountCount: number;
   album: Array<{ key: string; kind: string; nickname: string | null }>;
   draft: Draft | null;
@@ -679,6 +838,8 @@ export function DropClient(props: {
       {canAct && !verified && <Turnstile token={token} siteKey={props.siteKey} phase={phase} />}
       {verified && phase === "invite" && <Rsvp token={token} current={props.rsvp} info={props.guestInfo} />}
       {verified && canAct && props.me && <SaveSpot me={props.me} />}
+      {verified && canAct && <GuestSongs token={token} songs={props.songs} />}
+      {verified && canAct && phase !== "invite" && <GuestPlaces token={token} places={props.places} />}
       {verified && phase !== "invite" && <JumpNav links={jump} />}
       {verified && phase === "live" && <Uploader token={token} />}
       {showDraft && draftFirst && review}

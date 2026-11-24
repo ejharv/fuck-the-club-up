@@ -8,6 +8,7 @@ import { HOUSE_RULES } from "@/lib/sections";
 import { InviteCard } from "@/components/InviteCard";
 import { InviteEditor, type InviteData } from "@/components/InviteEditor";
 import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
+import { linkPaste } from "@/lib/link-paste";
 import { songsFromLines, songsToLines, type Song } from "@/lib/tracks";
 import type { Venue } from "@/lib/venues";
 import {
@@ -26,6 +27,9 @@ import {
   setGuestLimits,
   addHost,
   removeHost,
+  removeNightSong,
+  approveGuestPlace,
+  removeGuestPlaceAdmin,
   setHostName,
   removeRsvp,
   setVenues,
@@ -260,6 +264,55 @@ function UploadsPanel({ nightId, uploads }: { nightId: string; uploads: Upload[]
   );
 }
 
+function GuestPlacesPanel({ nightId, places }: { nightId: string; places: Array<{ id: string; name: string; url: string | null; kind: string }> }) {
+  const { pending, error, run } = useRun();
+  return (
+    <section aria-labelledby="gplaces-h" className="mt-6 rounded-md border-2 border-dashed border-pink p-4 sm:mt-8 sm:p-5">
+      <h2 id="gplaces-h" className="display text-xl">Places from guests ({places.length})</h2>
+      <p className="mt-1 text-sm text-dim">
+        Waiting for you. Approve adds it to this night&apos;s places (and the post when it drops). Check the website before you approve: it&apos;s shown in full below.
+      </p>
+      <ul className="mt-3 divide-y divide-line rounded border border-line">
+        {places.map((p) => (
+          <li key={p.id} className="space-y-2 p-3">
+            <p>
+              <strong>{p.name}</strong> <span className="mono text-xs text-dim">{p.kind === "eat" ? "Eat" : "Party"}</span>
+            </p>
+            {p.url ? <p className="mono break-all text-sm text-maize">{p.url}</p> : <p className="text-sm text-dim">No website</p>}
+            <div className="flex gap-2">
+              <button type="button" disabled={pending} onClick={() => run(() => approveGuestPlace(nightId, p.id))} className={btnGhost}>Approve</button>
+              <button type="button" disabled={pending} onClick={() => run(() => removeGuestPlaceAdmin(nightId, p.id))} className={textBtn}>Remove</button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <ErrorLine error={error} />
+    </section>
+  );
+}
+
+function GuestSongsPanel({ nightId, songs }: { nightId: string; songs: Array<{ id: string; title: string; artist: string | null; url: string | null }> }) {
+  const { pending, error, run } = useRun();
+  return (
+    <section aria-labelledby="gsongs-h" className="mt-6 rounded-md border border-line p-4 sm:mt-8 sm:p-5">
+      <h2 id="gsongs-h" className="display text-xl">Songs from guests ({songs.length})</h2>
+      <p className="mt-1 text-sm text-dim">Added on the party link. They go on the post&apos;s playlist when it drops, after the draft&apos;s songs.</p>
+      <ul className="mt-3 divide-y divide-line rounded border border-line">
+        {songs.map((s) => (
+          <li key={s.id} className="flex items-center justify-between gap-3 p-3">
+            <span className="min-w-0 truncate">
+              <strong>{s.title}</strong>
+              {s.artist && <span className="text-dim"> · {s.artist}</span>}
+            </span>
+            <button type="button" disabled={pending} onClick={() => run(() => removeNightSong(nightId, s.id))} className={textBtn}>Remove</button>
+          </li>
+        ))}
+      </ul>
+      <ErrorLine error={error} />
+    </section>
+  );
+}
+
 function VenuesPanel({ nightId, venues }: { nightId: string; venues: Venue[] }) {
   const [rows, setRows] = useState<VenueRow[]>(venues.length ? venues.map((v) => ({ name: v.name, url: v.url ?? "", kind: v.kind })) : [blankVenue()]);
   const { pending, error, run } = useRun();
@@ -358,7 +411,31 @@ function HostsPanel({ nightId, hosts, isAdmin, me }: { nightId: string; hosts: A
   );
 }
 
-type Rsvp = { device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number };
+type Rsvp = { device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number; mePath: string | null };
+
+/** Copies a guest's personal link so a host can send it to someone who got locked out (e.g. RSVPed inside Snapchat). */
+function CopyGuestLink({ path, name }: { path: string; name: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        const url = `${location.origin}${path}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          setDone(true);
+          setTimeout(() => setDone(false), 2500);
+        } catch {
+          window.prompt(`${name}'s personal link. Only send it to them:`, url);
+        }
+      }}
+      className={textBtn}
+      title={`Copy ${name}'s personal link. It signs in as them, so only send it to them.`}
+    >
+      {done ? "Copied" : "Copy link"}
+    </button>
+  );
+}
 
 function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[]; limits: { capacity: number | null; maxPlusOnes: number } }) {
   const { pending, error, run } = useRun();
@@ -406,7 +483,8 @@ function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[
               <ul className="mt-2 divide-y divide-line rounded border border-line">
                 {list.map((g) => (
                   <li key={g.device_id} className="flex min-h-12 items-center justify-between gap-3 px-3">
-                    <span className="min-w-0 truncate">{g.nickname}{g.plus_ones ? <span className="text-dim"> +{g.plus_ones}</span> : null}</span>
+                    <span className="min-w-0 flex-1 truncate">{g.nickname}{g.plus_ones ? <span className="text-dim"> +{g.plus_ones}</span> : null}</span>
+                    {g.mePath && <CopyGuestLink path={g.mePath} name={g.nickname} />}
                     <button
                       type="button"
                       disabled={pending}
@@ -422,6 +500,11 @@ function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[
           ) : null,
         )}
         {!rsvps.length && <p className="text-dim">No RSVPs yet. Share the link.</p>}
+        {rsvps.length > 0 && (
+          <p className="text-sm text-dim">
+            Someone locked out (say they RSVPed inside Snapchat and now it doesn&apos;t know them)? Tap Copy link next to their name and send it to just them. It signs them back in as themselves.
+          </p>
+        )}
       </div>
       <ErrorLine error={error} />
     </Panel>
@@ -566,12 +649,13 @@ function DraftPanel({
           </div>
           <div>
             <label htmlFor="draft-body" className="mb-1 block text-sm font-bold">Body</label>
-            <textarea id="draft-body" name="body" required rows={16} maxLength={60000} defaultValue={draft?.body ?? ""} className="field leading-relaxed" />
+            <textarea id="draft-body" name="body" required rows={16} maxLength={60000} defaultValue={draft?.body ?? ""} onPaste={linkPaste} className="field leading-relaxed" />
+            <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link.</p>
             <p className="mt-1 text-sm text-dim">Link a place with [Rick&apos;s](https://its-website.com). Saving makes a new version, and approvals start over.</p>
           </div>
           <div>
             <label htmlFor="draft-songs" className="mb-1 block text-sm font-bold">Songs of the night</label>
-            <textarea id="draft-songs" name="songs" rows={5} defaultValue={songsToLines(draftSongs)} placeholder={"The Killers - Mr. Brightside\nDancing Queen"} className="field font-mono text-sm leading-relaxed" />
+            <textarea id="draft-songs" name="songs" rows={5} defaultValue={songsToLines(draftSongs)} placeholder={"Paste a Spotify, SoundCloud, YouTube or Apple Music link\nor type: The Killers - Mr. Brightside"} className="field font-mono text-sm leading-relaxed" />
             <p className="mt-1 text-sm text-dim">One per line, &quot;Artist - Title&quot; or just the title. They go on the post and the Playlists tab.</p>
           </div>
           <div className="sticky bottom-0 -mx-4 border-t border-line bg-night/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
@@ -704,6 +788,8 @@ export function NightAdmin(props: {
   isAdmin: boolean;
   hosts: Array<{ email: string; name: string }>;
   me: string;
+  guestPlaces: Array<{ id: string; name: string; url: string | null; kind: string }>;
+  guestSongs: Array<{ id: string; title: string; artist: string | null; url: string | null }>;
   draft: Draft | null;
   draftBody: ReactNode;
   review: { approvals: number; notes: Array<{ nickname: string | null; body: string }> };
@@ -769,7 +855,9 @@ export function NightAdmin(props: {
       {!dropped && <GuestsPanel nightId={night.id} rsvps={props.rsvps} limits={props.guestLimits} />}
       <AccountsPanel nightId={night.id} accounts={props.accounts} rsvps={props.rsvps} />
       <UploadsPanel nightId={night.id} uploads={props.uploads} />
+      {!dropped && props.guestPlaces.length > 0 && <GuestPlacesPanel nightId={night.id} places={props.guestPlaces} />}
       {!dropped && <VenuesPanel nightId={night.id} venues={props.venues} />}
+      {!dropped && props.guestSongs.length > 0 && <GuestSongsPanel nightId={night.id} songs={props.guestSongs} />}
       {!dropped && (
         <DraftPanel
           nightId={night.id}

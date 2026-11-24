@@ -8,6 +8,7 @@ import { PhoneUploadQR } from "@/components/PhoneUploadQR";
 import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
 import { MAX_FILES_PER_POST } from "@/lib/media-rules";
 import { HOUSE_RULES } from "@/lib/sections";
+import { linkPaste } from "@/lib/link-paste";
 import { songsToLines } from "@/lib/tracks";
 
 type Fields = {
@@ -132,7 +133,8 @@ export function EditPostForm({
 
       <div>
         <label htmlFor="body" className="mb-2 block font-bold">The story</label>
-        <textarea id="body" name="body" required rows={14} maxLength={60000} defaultValue={post.body} className="field leading-relaxed" />
+        <textarea id="body" name="body" required rows={14} maxLength={60000} defaultValue={post.body} onPaste={linkPaste} className="field leading-relaxed" />
+        <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link.</p>
       </div>
 
       {items.length > 0 && (
@@ -206,7 +208,7 @@ export function EditPostForm({
 
       <div>
         <label htmlFor="songs" className="mb-2 block font-bold">Songs of the night</label>
-        <textarea id="songs" value={songs} onChange={(e) => setSongs(e.target.value)} rows={4} className="field font-mono text-[16px] leading-relaxed sm:text-sm" placeholder={"The Killers - Mr. Brightside\nDancing Queen"} />
+        <textarea id="songs" value={songs} onChange={(e) => setSongs(e.target.value)} rows={4} className="field font-mono text-[16px] leading-relaxed sm:text-sm" placeholder={"Paste a Spotify, SoundCloud, YouTube or Apple Music link\nor type: The Killers - Mr. Brightside"} />
         <p className="mt-1 text-sm text-dim">One per line. Music links in the post are included automatically.</p>
       </div>
 

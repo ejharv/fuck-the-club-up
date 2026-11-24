@@ -9,17 +9,71 @@ export const VENUE_KINDS: Array<{ value: VenueKind; label: string }> = [
 
 export const MAX_VENUES = 12;
 
-/** Normalize a website: https only, no tracking params. Returns null for blanks, an error string for junk. */
-export function cleanVenueUrl(raw: unknown): string | null | { error: string } {
+/** Link shorteners hide where a link really goes, so they're refused. */
+const SHORTENERS = new Set([
+  "bit.ly", "bitly.com", "tinyurl.com", "t.co", "goo.gl", "ow.ly", "is.gd", "buff.ly", "rebrand.ly", "cutt.ly", "shorturl.at",
+  "rb.gy", "tiny.cc", "t.ly", "s.id", "v.gd", "lnkd.in", "trib.al", "bl.ink", "short.io", "shorte.st", "adf.ly", "linktr.ee",
+  "qrco.de", "x.co", "u.to", "clck.ru", "soo.gd", "tr.im", "snip.ly", "urlz.fr", "2u.pw", "1url.com", "kutt.it", "shor.by",
+]);
+/** File types a place's website never needs to link to directly. */
+const RISKY_FILE = /\.(exe|msi|apk|aab|ipa|dmg|pkg|app|bat|cmd|com|scr|pif|cpl|jar|js|mjs|vbs|vbe|wsf|ps1|psm1|sh|zip|rar|7z|tar|gz|tgz|iso|img|hta|lnk|reg|dll|deb|rpm|xlsm|docm|pptm)$/i;
+
+/**
+ * Normalize a place's website. Strict on purpose, since guests can submit these:
+ * https only; a real public domain (no IPs, localhost, internal names, odd
+ * ports or look-alike "xn--" domains); no logins in the link; no shorteners;
+ * no downloadable/script files. Query strings and #fragments are dropped
+ * (tracking or tokens only) unless `keepQuery` is set for crew.
+ * Returns null for blanks, or an error for anything else that fails.
+ */
+export function cleanVenueUrl(raw: unknown, opts: { keepQuery?: boolean } = {}): string | null | { error: string } {
   const s = typeof raw === "string" ? raw.trim() : "";
   if (!s) return null;
+  const bad = { error: "That website doesn't look right. Use the place's own site, like rickscafe.com." };
+  if (s.length > 300 || /[\s<>"'`\\]|[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069]/.test(s)) return bad;
+  let u: URL;
   try {
-    const u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return { error: "Websites have to start with http or https." };
-    for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid)/i.test(k)) u.searchParams.delete(k);
-    return u.toString().slice(0, 300);
+    u = new URL(/^[a-z][a-z0-9+.-]*:/i.test(s) ? s : `https://${s}`);
   } catch {
-    return { error: "That website doesn't look right." };
+    return bad;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return { error: "Websites have to start with http or https." };
+  u.protocol = "https:";
+  if (u.username || u.password) return bad;
+  if (u.port && u.port !== "443") return bad;
+  u.port = "";
+  const host = u.hostname.toLowerCase().replace(/\.$/, "");
+  const labels = host.split(".");
+  if (
+    labels.length < 2 ||
+    host.length > 253 ||
+    /^[\d.]+$/.test(host) || host.includes(":") || host.startsWith("[") ||
+    !labels.every((l) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(l)) ||
+    labels.some((l) => l.startsWith("xn--")) ||
+    !/^[a-z]{2,24}$/.test(labels[labels.length - 1]) ||
+    /(^|\.)(localhost|local|internal|intranet|lan|home|corp|test|example|invalid|onion|arpa)$/.test(host)
+  ) {
+    return bad;
+  }
+  if (SHORTENERS.has(host.replace(/^www\./, ""))) return { error: "No short links. Use the place's full website." };
+  if (RISKY_FILE.test(decodeURIComponent(u.pathname).replace(/\/+$/, ""))) return { error: "Link to the place's website, not a file." };
+  u.hostname = host;
+  u.hash = "";
+  if (opts.keepQuery) {
+    for (const k of [...u.searchParams.keys()]) if (/^(utm_|fbclid|gclid|igsh|si$|mc_)/i.test(k)) u.searchParams.delete(k);
+  } else {
+    u.search = "";
+  }
+  const out = u.toString();
+  return out.length > 200 ? bad : out;
+}
+
+/** The domain to show next to a link, so people can see where it goes. */
+export function linkDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
   }
 }
 
@@ -46,7 +100,7 @@ export function cleanVenues(input: unknown): Venue[] | { error: string } {
     const rawUrl = typeof v?.url === "string" ? v.url : "";
     if (!name && !rawUrl.trim()) continue;
     if (!name) return { error: "Every place needs a name." };
-    const url = cleanVenueUrl(rawUrl);
+    const url = cleanVenueUrl(rawUrl, { keepQuery: true });
     if (url && typeof url === "object") return { error: `${name}: ${url.error}` };
     out.push({ name, url: url as string | null, kind: v?.kind === "eat" ? "eat" : "party" });
   }
