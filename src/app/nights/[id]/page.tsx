@@ -117,7 +117,7 @@ export default async function NightAdminPage({
         rsvps={await Promise.all(
           rsvps.results.map(async (r) => ({ ...r, mePath: link ? `/drop/${link}/me/${await mePass(env.AUTH_SECRET, night.id, r.device_id)}` : null })),
         )}
-        guestLimits={{ capacity: night.capacity, maxPlusOnes: night.max_plus_ones }}
+        guestLimits={{ capacity: night.capacity }}
         isAdmin={access.role === "admin"}
         hosts={hosts.results.map((h) => ({ email: h.email, name: h.display_name ?? "" }))}
         me={access.email}

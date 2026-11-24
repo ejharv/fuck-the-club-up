@@ -131,12 +131,11 @@ function useAction() {
   return { pending, msg, run };
 }
 
-type MyRsvp = { nickname: string; answer: string; plusOnes: number; waitlisted: boolean };
-type GuestInfo = { maxPlusOnes: number; spotsLeft: number | null; waitlist: number };
+type MyRsvp = { nickname: string; answer: string; waitlisted: boolean };
+type GuestInfo = { spotsLeft: number | null; waitlist: number };
 
 function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null; info: GuestInfo }) {
   const [nickname, setNickname] = useState(current?.nickname ?? "");
-  const [plus, setPlus] = useState(current?.plusOnes ?? 0);
   const { pending, msg, run } = useAction();
   const choices = [
     ["going", "I'm in"],
@@ -147,7 +146,7 @@ function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null;
   const full = info.spotsLeft === 0 && !(current?.answer === "going" && !current.waitlisted);
   const send = (value: string) =>
     run(async () => {
-      const r = await rsvp(token, nickname, value, value === "going" ? plus : 0);
+      const r = await rsvp(token, nickname, value);
       return r;
     }, value === "cant" ? "Got it. Next time." : value === "maybe" ? "Marked as maybe." : "You're in.");
   return (
@@ -158,7 +157,7 @@ function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null;
           {current.answer === "going" && current.waitlisted ? (
             <>You&apos;re on the <span className="font-bold text-pink">waitlist</span> as {current.nickname}. If a spot opens up, you&apos;re in automatically.</>
           ) : (
-            <>You said <span className="font-bold text-maize">{currentLabel}</span> as {current.nickname}{current.plusOnes ? ` +${current.plusOnes}` : ""}. Tap another answer to change it.</>
+            <>You said <span className="font-bold text-maize">{currentLabel}</span> as {current.nickname}. Tap another answer to change it.</>
           )}
         </p>
       ) : (
@@ -180,35 +179,6 @@ function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null;
         className="field mt-2 min-h-12 sm:w-72"
         placeholder="Whatever you want to go by"
       />
-      {info.maxPlusOnes >= 99 && (
-        <div className="mt-4">
-          <span id="plus-label" className="block font-bold">Bringing anyone?</span>
-          <div className="mt-2 flex items-center gap-3" aria-labelledby="plus-label">
-            <button type="button" aria-label="One fewer" onClick={() => setPlus((p) => Math.max(0, p - 1))} disabled={plus === 0} className="grid h-12 w-12 place-items-center rounded-full border border-line text-2xl font-bold hover:border-maize disabled:opacity-40">−</button>
-            <span role="status" className="min-w-24 text-center text-lg font-bold">{plus === 0 ? "Just me" : `Me +${plus}`}</span>
-            <button type="button" aria-label="One more" onClick={() => setPlus((p) => Math.min(50, p + 1))} disabled={plus >= 50} className="grid h-12 w-12 place-items-center rounded-full border border-line text-2xl font-bold hover:border-maize disabled:opacity-40">+</button>
-          </div>
-        </div>
-      )}
-      {info.maxPlusOnes > 0 && info.maxPlusOnes < 99 && (
-        <div className="mt-4">
-          <span id="plus-label" className="block font-bold">Bringing anyone?</span>
-          <div role="radiogroup" aria-labelledby="plus-label" className="mt-2 flex flex-wrap gap-2">
-            {Array.from({ length: info.maxPlusOnes + 1 }, (_, n) => (
-              <button
-                key={n}
-                type="button"
-                role="radio"
-                aria-checked={plus === n}
-                onClick={() => setPlus(n)}
-                className={`min-h-11 min-w-14 rounded-full border px-4 font-bold ${plus === n ? "border-maize bg-maize text-night" : "border-line hover:border-maize"}`}
-              >
-                {n === 0 ? "Just me" : `+${n}`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       <div className="mt-4 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-3">
         {choices.map(([value, label]) => (
           <button

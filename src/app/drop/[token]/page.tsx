@@ -112,9 +112,9 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
     if (night.location_text) google.searchParams.set("location", night.location_text);
     me = { path, ics: `${path}/calendar.ics`, google: google.toString() };
   }
-  const going = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).map((r) => (r.plus_ones ? `${r.nickname} +${r.plus_ones}` : r.nickname));
+  const going = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).map((r) => r.nickname);
   const maybe = rsvps.results.filter((r) => r.answer === "maybe").map((r) => r.nickname);
-  const headcount = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).reduce((n, r) => n + 1 + r.plus_ones, 0);
+  const headcount = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).length;
   const waitlistCount = rsvps.results.filter((r) => r.answer === "going" && r.waitlisted).length;
   const spotsLeft = night.capacity === null ? null : Math.max(0, night.capacity - headcount);
 
@@ -133,8 +133,8 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         phase={phase}
         verified={verified}
         siteKey={env.TURNSTILE_SITE_KEY}
-        rsvp={myRsvp ? { nickname: myRsvp.nickname, answer: myRsvp.answer, plusOnes: myRsvp.plus_ones, waitlisted: Boolean(myRsvp.waitlisted) } : null}
-        guestInfo={{ maxPlusOnes: night.max_plus_ones, spotsLeft, waitlist: waitlistCount }}
+        rsvp={myRsvp ? { nickname: myRsvp.nickname, answer: myRsvp.answer, waitlisted: Boolean(myRsvp.waitlisted) } : null}
+        guestInfo={{ spotsLeft, waitlist: waitlistCount }}
         account={mine ?? null}
         me={me}
         nightName={night.name}

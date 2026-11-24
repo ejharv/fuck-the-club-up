@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { encryptText, randomToken, sha256Hex } from "@/lib/crypto";
-import { MAX_PLUS_ONES_LIMIT, UNLIMITED_PLUS_ONES, promoteWaitlist } from "@/lib/guests";
+import { promoteWaitlist } from "@/lib/guests";
 import { runDrop, type DropFields } from "@/lib/drop";
 import { cf } from "@/lib/env";
 import { defaultClosesAt, getNight, isStuckDrop, latestDraft } from "@/lib/nights";
@@ -36,16 +36,12 @@ function detroitToIso(local: string): string | null {
   return null;
 }
 
-/** Guest cap (blank = no limit) and +1s per guest. */
-function guestLimits(capacityRaw: unknown, plusRaw: unknown): { capacity: number | null; maxPlusOnes: number } | { error: string } {
+/** Guest cap (blank = no limit). */
+function guestLimits(capacityRaw: unknown): { capacity: number | null; maxPlusOnes: number } | { error: string } {
   const c = String(capacityRaw ?? "").trim();
   const capacity = c ? Math.trunc(Number(c)) : null;
   if (capacity !== null && (!Number.isFinite(capacity) || capacity < 1 || capacity > 5000)) return { error: "The guest limit has to be between 1 and 5000, or blank for no limit." };
-  const maxPlusOnes = Math.trunc(Number(plusRaw ?? 0) || 0);
-  if (maxPlusOnes !== UNLIMITED_PLUS_ONES && (maxPlusOnes < 0 || maxPlusOnes > MAX_PLUS_ONES_LIMIT)) {
-    return { error: `+1s can be 0 to ${MAX_PLUS_ONES_LIMIT}, or unlimited.` };
-  }
-  return { capacity, maxPlusOnes };
+  return { capacity, maxPlusOnes: 0 };
 }
 
 export async function createNight(_prev: AdminResult, form: FormData): Promise<AdminResult> {
@@ -64,7 +60,7 @@ export async function createNight(_prev: AdminResult, form: FormData): Promise<A
     if (new Date(closesAt) <= new Date()) closesAt = new Date(Date.now() + 7 * 864e5).toISOString(); // past nights: a week to collect
     if (new Date(closesAt) <= new Date(opensAt)) return { error: "The link has to close after the party starts." };
 
-    const limits = guestLimits(form.get("capacity"), form.get("plusOnes"));
+    const limits = guestLimits(form.get("capacity"));
     if ("error" in limits) return limits;
     const token = randomToken();
     const id = crypto.randomUUID();
@@ -326,17 +322,13 @@ export async function setVenues(nightId: string, venues: Array<{ name: string; u
   }
 }
 
-/** Change the guest cap or +1s later. Raising the cap pulls people off the waitlist. */
-export async function setGuestLimits(nightId: string, capacity: string, plusOnes: string): Promise<AdminResult> {
+/** Change the guest cap later. Raising it pulls people off the waitlist. */
+export async function setGuestLimits(nightId: string, capacity: string): Promise<AdminResult> {
   try {
     const { env, night } = await adminNight(nightId);
-    const limits = guestLimits(capacity, plusOnes);
+    const limits = guestLimits(capacity);
     if ("error" in limits) return limits;
-    await env.DB.batch([
-      env.DB.prepare("UPDATE nights SET capacity = ?, max_plus_ones = ? WHERE id = ?").bind(limits.capacity, limits.maxPlusOnes, night.id),
-      // Lowering the +1 limit trims existing +1s to fit.
-      env.DB.prepare("UPDATE night_rsvps SET plus_ones = MIN(plus_ones, ?) WHERE night_id = ?").bind(limits.maxPlusOnes, night.id),
-    ]);
+    await env.DB.prepare("UPDATE nights SET capacity = ? WHERE id = ?").bind(limits.capacity, night.id).run();
     await promoteWaitlist(env.DB, night.id);
     revalidatePath(`/nights/${night.id}`);
     return { ok: true };

@@ -437,15 +437,14 @@ function CopyGuestLink({ path, name }: { path: string; name: string }) {
   );
 }
 
-function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[]; limits: { capacity: number | null; maxPlusOnes: number } }) {
+function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[]; limits: { capacity: number | null } }) {
   const { pending, error, run } = useRun();
   const [capacity, setCapacity] = useState(limits.capacity === null ? "" : String(limits.capacity));
-  const [plus, setPlus] = useState(String(limits.maxPlusOnes));
   const going = rsvps.filter((g) => g.answer === "going" && !g.waitlisted);
   const waitlist = rsvps.filter((g) => g.answer === "going" && g.waitlisted);
   const maybe = rsvps.filter((g) => g.answer === "maybe");
   const cant = rsvps.filter((g) => g.answer === "cant");
-  const headcount = going.reduce((n, g) => n + 1 + g.plus_ones, 0);
+  const headcount = going.length;
   const groups: Array<[string, Rsvp[]]> = [
     ["Going", going],
     ["Waitlist", waitlist],
@@ -459,19 +458,13 @@ function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[
       title="Guest list"
       meta={`${headcount}${limits.capacity !== null ? ` of ${limits.capacity}` : ""} going${waitlist.length ? ` · ${waitlist.length} waitlisted` : ""}`}
     >
-      <div className="grid grid-cols-2 gap-3 sm:flex sm:items-end">
+      <div className="flex items-end gap-3">
         <div>
           <label htmlFor="g-cap" className="mb-1 block text-sm font-bold">Guest limit</label>
           <input id="g-cap" value={capacity} onChange={(e) => setCapacity(e.target.value)} type="number" inputMode="numeric" min={1} max={5000} placeholder="No limit" className="field sm:w-32" />
         </div>
-        <div>
-          <label htmlFor="g-plus" className="mb-1 block text-sm font-bold">+1s per guest</label>
-          <select id="g-plus" value={plus} onChange={(e) => setPlus(e.target.value)} className="field sm:w-36">
-            {[0, 1, 2, 3, 4, 5, 99].map((n) => <option key={n} value={n}>{n === 0 ? "None" : n === 99 ? "Unlimited" : `Up to ${n}`}</option>)}
-          </select>
-        </div>
-        <button type="button" disabled={pending} onClick={() => run(() => setGuestLimits(nightId, capacity, plus))} className={`${btnGhost} col-span-2`}>
-          {pending ? "Saving…" : "Save limits"}
+        <button type="button" disabled={pending} onClick={() => run(() => setGuestLimits(nightId, capacity))} className={btnGhost}>
+          {pending ? "Saving…" : "Save limit"}
         </button>
       </div>
       <p className="mt-2 text-sm text-dim">Raising the limit lets people in off the waitlist, oldest first.</p>
@@ -483,7 +476,7 @@ function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[
               <ul className="mt-2 divide-y divide-line rounded border border-line">
                 {list.map((g) => (
                   <li key={g.device_id} className="flex min-h-12 items-center justify-between gap-3 px-3">
-                    <span className="min-w-0 flex-1 truncate">{g.nickname}{g.plus_ones ? <span className="text-dim"> +{g.plus_ones}</span> : null}</span>
+                    <span className="min-w-0 flex-1 truncate">{g.nickname}</span>
                     {g.mePath && <CopyGuestLink path={g.mePath} name={g.nickname} />}
                     <button
                       type="button"
@@ -784,7 +777,7 @@ export function NightAdmin(props: {
   uploads: Upload[];
   accounts: Array<{ device_id: string; nickname: string; body: string }>;
   rsvps: Rsvp[];
-  guestLimits: { capacity: number | null; maxPlusOnes: number };
+  guestLimits: { capacity: number | null };
   isAdmin: boolean;
   hosts: Array<{ email: string; name: string }>;
   me: string;
@@ -804,7 +797,7 @@ export function NightAdmin(props: {
   const undecided = props.uploads.filter((u) => u.decision !== "keep" && u.decision !== "toss").length;
   const accountCount = props.accounts.length;
   const approvals = props.review.approvals;
-  const guestHeadcount = props.rsvps.filter((g) => g.answer === "going" && !g.waitlisted).reduce((n, g) => n + 1 + g.plus_ones, 0);
+  const guestHeadcount = props.rsvps.filter((g) => g.answer === "going" && !g.waitlisted).length;
   const steps: Step[] = [
     ...(!dropped ? [{ id: "link", n: 1, label: "Link", done: night.phase !== "invite" && night.phase !== "live" }] : []),
     { id: "guests", n: 2, label: "Guests", value: String(guestHeadcount), done: guestHeadcount > 0 },

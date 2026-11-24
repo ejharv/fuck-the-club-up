@@ -37,24 +37,11 @@ export function NewNightForm() {
       </div>
       <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4">
         <legend className="mono px-2 text-maize">Guest list</legend>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="capacity" className="mb-2 block font-bold">Guest limit</label>
-            <input id="capacity" name="capacity" type="number" inputMode="numeric" min={1} max={5000} className="field" placeholder="No limit" />
-          </div>
-          <div>
-            <label htmlFor="plusOnes" className="mb-2 block font-bold">+1s per guest</label>
-            <select id="plusOnes" name="plusOnes" defaultValue="0" className="field">
-              <option value="0">None</option>
-              <option value="1">Up to 1</option>
-              <option value="2">Up to 2</option>
-              <option value="3">Up to 3</option>
-              <option value="5">Up to 5</option>
-              <option value="99">Unlimited</option>
-            </select>
-          </div>
+        <div>
+          <label htmlFor="capacity" className="mb-2 block font-bold">Guest limit</label>
+          <input id="capacity" name="capacity" type="number" inputMode="numeric" min={1} max={5000} className="field sm:w-48" placeholder="No limit" />
         </div>
-        <p className="mt-2 text-sm text-dim">The limit counts guests and their +1s. Once it&apos;s full, new RSVPs go on a waitlist and move up automatically when spots open. You can change both later.</p>
+        <p className="mt-2 text-sm text-dim">Guests can share the invite, and everyone RSVPs for themselves. Once the limit is hit, new RSVPs go on a waitlist and move up automatically when spots open. You can change it later.</p>
       </fieldset>
       <div>
         <label htmlFor="details" className="mb-2 block font-bold">The invite (optional)</label>

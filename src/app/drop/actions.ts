@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { dropContext, requireVerified } from "@/lib/drop-context";
 import { clean } from "@/lib/post-fields";
-import { UNLIMITED_PER_GUEST, UNLIMITED_PLUS_ONES, promoteWaitlist, rsvpStatement } from "@/lib/guests";
+import { promoteWaitlist, rsvpStatement } from "@/lib/guests";
 import { isReviewable, latestDraft, phaseOf, nameTaken } from "@/lib/nights";
 import { LIMITS } from "@/lib/synthesis";
 import { songsFromLines } from "@/lib/tracks";
@@ -110,22 +110,17 @@ async function ctxFor(token: string) {
 
 const nick = (v: unknown) => clean(v, 40);
 
-export async function rsvp(token: string, nickname: string, answer: string, plusOnes = 0): Promise<DropResult> {
+export async function rsvp(token: string, nickname: string, answer: string): Promise<DropResult> {
   const ctx = await ctxFor(token);
   if ("error" in ctx) return ctx;
   if (phaseOf(ctx.night) !== "invite" && phaseOf(ctx.night) !== "live") return { error: "RSVPs are closed for this one." };
   const name = nick(nickname);
   if (!name) return { error: "Add your name or a nickname so the host knows who's coming." };
   if (!["going", "maybe", "cant"].includes(answer)) return { error: "Pick going, maybe or can't." };
-  const plus = answer === "going" ? Math.trunc(Number(plusOnes) || 0) : 0;
-  const allowed = ctx.night.max_plus_ones >= UNLIMITED_PLUS_ONES ? UNLIMITED_PER_GUEST : ctx.night.max_plus_ones;
-  if (plus < 0 || plus > allowed) {
-    return { error: allowed ? `You can bring up to ${allowed}.` : "This one's no +1s." };
-  }
   if (await nameTaken(ctx.env.DB, ctx.night.id, ctx.device, name)) {
     return { error: `Someone already RSVPed as "${name}". Add an initial or pick another nickname. If that's you (say you RSVPed in Snapchat), ask the host to send you your link.` };
   }
-  await rsvpStatement(ctx.env.DB, ctx.night.id, ctx.device, name, answer, plus).run();
+  await rsvpStatement(ctx.env.DB, ctx.night.id, ctx.device, name, answer, 0).run();
   await promoteWaitlist(ctx.env.DB, ctx.night.id);
   const mine = await ctx.env.DB.prepare("SELECT waitlisted FROM night_rsvps WHERE night_id = ? AND device_id = ?")
     .bind(ctx.night.id, ctx.device)
