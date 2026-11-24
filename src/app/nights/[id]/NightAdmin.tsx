@@ -508,7 +508,7 @@ function AccountsPanel({ nightId, accounts, rsvps }: { nightId: string; accounts
   const { pending, error, run } = useRun();
   const going = rsvps.filter((r) => r.answer === "going").map((r) => r.nickname);
   return (
-    <Panel id="accounts" step={3} title="Accounts" meta={`${accounts.length} written · ${going.length} going`}>
+    <Panel id="accounts" step={3} title="Stories" meta={`${accounts.length} written · ${going.length} going`}>
       {rsvps.length > 0 && <p className="text-dim">RSVP&apos;d going: {going.join(", ") || "nobody yet"}.</p>}
       {accounts.length ? (
         <ul className="mt-4 space-y-3">
@@ -516,14 +516,14 @@ function AccountsPanel({ nightId, accounts, rsvps }: { nightId: string; accounts
             <li key={a.device_id} className="rounded bg-night-2 p-4">
               <div className="-my-2 flex items-center justify-between gap-3">
                 <span className="mono text-maize">{a.nickname}</span>
-                <button type="button" disabled={pending} onClick={() => confirm(`Remove ${a.nickname}'s account?`) && run(() => removeAccount(nightId, a.device_id))} className={`${textBtn} -mr-2`}>Remove</button>
+                <button type="button" disabled={pending} onClick={() => confirm(`Remove ${a.nickname}'s story?`) && run(() => removeAccount(nightId, a.device_id))} className={`${textBtn} -mr-2`}>Remove</button>
               </div>
               <p className="mt-2 whitespace-pre-line">{a.body}</p>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-dim">Nobody has written their side yet. Accounts open on the link when the party starts.</p>
+        <p className="mt-2 text-dim">Nobody has written their side yet. Stories open on the link when the party starts.</p>
       )}
       <ErrorLine error={error} />
     </Panel>
@@ -801,7 +801,7 @@ export function NightAdmin(props: {
   const steps: Step[] = [
     ...(!dropped ? [{ id: "link", n: 1, label: "Link", done: night.phase !== "invite" && night.phase !== "live" }] : []),
     { id: "guests", n: 2, label: "Guests", value: String(guestHeadcount), done: guestHeadcount > 0 },
-    { id: "accounts", n: 3, label: "Accounts", value: String(accountCount), done: accountCount > 0 },
+    { id: "accounts", n: 3, label: "Stories", value: String(accountCount), done: accountCount > 0 },
     { id: "photos", n: 4, label: "Photos", value: props.uploads.length ? `${kept}/${props.uploads.length}` : "0", done: props.uploads.length > 0 && undecided === 0 },
     ...(!dropped
       ? [
@@ -878,7 +878,7 @@ export function NightAdmin(props: {
           <button
             type="button"
             disabled={pending}
-            onClick={() => confirm("Delete this night, its album and everyone's accounts? A dropped post stays up.") && run(() => deleteNight(night.id))}
+            onClick={() => confirm("Delete this night, its album and everyone's stories? A dropped post stays up.") && run(() => deleteNight(night.id))}
             className={`${textBtn} -ml-2`}
           >
             Delete this night and its album

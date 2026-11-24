@@ -24,7 +24,7 @@ export function InviteCard({
   mediaKind: "video" | "photo" | null;
   storedSig: string | null;
 }) {
-  const sig = `v1|${name}|${opensAt}|${mediaUrl ?? ""}`;
+  const sig = `v3|${name}|${opensAt}|${mediaUrl ?? ""}`;
   const running = useRef(false);
 
   useEffect(() => {
@@ -131,11 +131,27 @@ async function drawCard(name: string, opensAt: string, mediaUrl: string | null, 
       const areaX = W * 0.42;
       const areaW = W - areaX;
       const scale = Math.max(areaW / mw, H / mh);
+      // Clip to the right-hand area: a wide photo must never spill into the text side.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(areaX, 0, areaW, H);
+      ctx.clip();
       ctx.drawImage(media, areaX + (areaW - mw * scale) / 2, (H - mh * scale) / 2, mw * scale, mh * scale);
-      const g = ctx.createLinearGradient(areaX, 0, areaX + areaW * 0.55, 0);
+      ctx.restore();
+      // Fade from solid navy at the area's edge to a light tint, so the seam never shows.
+      const g = ctx.createLinearGradient(areaX - 1, 0, areaX + areaW * 0.6, 0);
       g.addColorStop(0, "rgba(12,13,28,1)");
+      g.addColorStop(0.35, "rgba(12,13,28,0.75)");
       g.addColorStop(1, "rgba(12,13,28,0.15)");
       ctx.fillStyle = g;
+      ctx.fillRect(areaX - 1, 0, areaW + 1, H);
+      // A little shade top and bottom keeps the dashed strips readable on bright photos.
+      const v = ctx.createLinearGradient(0, 0, 0, H);
+      v.addColorStop(0, "rgba(12,13,28,0.45)");
+      v.addColorStop(0.18, "rgba(12,13,28,0)");
+      v.addColorStop(0.82, "rgba(12,13,28,0)");
+      v.addColorStop(1, "rgba(12,13,28,0.45)");
+      ctx.fillStyle = v;
       ctx.fillRect(areaX, 0, areaW, H);
     }
   } else {
@@ -169,7 +185,9 @@ async function drawCard(name: string, opensAt: string, mediaUrl: string | null, 
   for (; size >= 52; size -= 6) {
     ctx.font = `${size}px ${display}`;
     lines = wrap(ctx, name.toUpperCase(), maxW);
-    if (lines.length <= 3 && lines.every((l) => ctx.measureText(l).width <= maxW)) break;
+    // Must fit width-wise in at most 3 lines AND leave room for the date above the logo.
+    const lastBaseline = 150 + size * 0.8 + (Math.min(lines.length, 3) - 1) * size * 0.92;
+    if (lines.length <= 3 && lines.every((l) => ctx.measureText(l).width <= maxW) && lastBaseline + 52 <= H - 110) break;
   }
   ctx.fillStyle = "#f2eee4";
   const lh = size * 0.92;
@@ -185,7 +203,8 @@ async function drawCard(name: string, opensAt: string, mediaUrl: string | null, 
     .toUpperCase();
   ctx.fillStyle = "#ffcb05";
   ctx.font = `500 28px ${mono}`;
-  ctx.fillText(when, 72, Math.min(y + 18, H - 120));
+  // y is one line-height past the last title line; the date sits a clear gap below the title.
+  ctx.fillText(when, 72, Math.min(y - size * 0.92 + 52, H - 110));
 
   // Logo.
   ctx.font = `34px ${display}`;

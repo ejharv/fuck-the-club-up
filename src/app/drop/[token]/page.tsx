@@ -98,6 +98,9 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
     mine: placeRows.results,
   };
   const songs = songRows.results.map((s) => ({ id: s.id, title: s.title, artist: s.artist, mine: s.device_id === device }));
+  const myEmail = device
+    ? await DB.prepare("SELECT email_hint FROM night_emails WHERE night_id = ? AND device_id = ?").bind(night.id, device).first<{ email_hint: string }>()
+    : null;
   let me: { path: string; ics: string; google: string } | null = null;
   if (device && verified && (myRsvp || mine)) {
     const pass = await mePass(env.AUTH_SECRET, night.id, device);
@@ -137,6 +140,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         guestInfo={{ spotsLeft, waitlist: waitlistCount }}
         account={mine ?? null}
         me={me}
+        emailHint={myEmail?.email_hint ?? null}
         nightName={night.name}
         songs={songs}
         places={places}
@@ -184,7 +188,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
           <h2 id="how-h" className="mono text-pink">How this works</h2>
           <ol className="mt-3 space-y-3">
             {[
-              ["RSVP now", "Pick a name or nickname. No account, no app, no email."],
+              ["RSVP now", "Pick a name or nickname. No sign-up, no app."],
               ["On the night, use this same link", "Drop your photos and videos and write your side of the story."],
             ].map(([t, d], i) => (
               <li key={t} className="flex gap-3">

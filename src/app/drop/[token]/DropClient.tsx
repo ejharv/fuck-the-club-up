@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { soundcloudSearch, spotifySearch } from "@/lib/tracks";
 import { browserEnv, browserName, openOutHref, type BrowserEnv } from "@/lib/in-app";
 import { linkDomain, type Venue } from "@/lib/venues";
-import { addNote, rsvp, saveAccount, setApproval, addGuestSongs, addGuestSongPick, removeGuestSong, addGuestPlace, removeGuestPlace, setUploadCaption } from "@/app/drop/actions";
+import { addNote, rsvp, saveAccount, setApproval, addGuestSongs, addGuestSongPick, removeGuestSong, addGuestPlace, removeGuestPlace, setUploadCaption, setGuestEmail, removeGuestEmail } from "@/app/drop/actions";
 import { ACCEPT_ATTR, ALLOWED_TYPES } from "@/lib/media-rules";
 import type { Phase } from "@/lib/nights";
 import { putWithProgress, scrubPhoto } from "@/lib/scrub-photo";
@@ -426,39 +426,92 @@ function ShareInvite({ token, name, rsvped }: { token: string; name: string; rsv
 }
 
 /** Keeps a guest's spot when the invite was opened inside Snapchat/Instagram etc. */
-function SaveSpot({ me }: { me: { path: string; ics: string; google: string } }) {
+function SaveSpot({ token, me, emailHint }: { token: string; me: { path: string }; emailHint: string | null }) {
   const [copied, setCopied] = useState(false);
-  const [env, setEnv] = useState<BrowserEnv & { url: string }>({ inApp: null, ios: false, android: false, url: me.path });
-  useEffect(() => setEnv({ ...browserEnv(), url: `${location.origin}${me.path}` }), [me.path]);
-  const openOut = openOutHref(env.url, env);
+  const [inApp, setInApp] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [editing, setEditing] = useState(!emailHint);
+  const [hint, setHint] = useState(emailHint);
+  const { pending, msg, run } = useAction();
+  useEffect(() => setInApp(browserEnv().inApp), []);
   async function copy() {
+    const url = `${location.origin}${me.path}`;
     try {
-      await navigator.clipboard.writeText(env.url);
+      await navigator.clipboard.writeText(url);
       setCopied(true);
     } catch {
-      window.prompt("Copy your link:", env.url);
+      window.prompt("Copy your link:", url);
     }
   }
-  const btn = "inline-flex min-h-11 items-center justify-center rounded-full border border-ink px-4 text-sm font-bold hover:border-maize hover:text-maize";
   return (
-    <section aria-labelledby="spot-h" className="mt-6 rounded-md border-2 border-dashed border-maize p-5">
-      <h2 id="spot-h" className="display text-2xl">Save your spot</h2>
-      <p className="mt-2 text-dim">
-        {env.inApp
-          ? "Apps like Snapchat don't always keep you signed in. Save your personal link so you're ready on the night: it gets you back in as you, from any phone or browser."
-          : "Your personal link gets you back in as you, from any phone or browser. Save it so you're ready on the night."}
-      </p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        <a href={me.ics} className={btn}>Add to calendar (iPhone/Outlook)</a>
-        <a href={me.google} target="_blank" rel="noopener noreferrer" className={btn}>Add to Google Calendar</a>
-        <button type="button" onClick={copy} className={btn}>{copied ? "Copied" : "Copy my link"}</button>
-        {env.inApp && (env.ios || env.android) && (
-          <a href={openOut} className={`${btn} border-maize bg-maize text-night hover:bg-ink hover:text-night`}>
-            Open in {browserName(env)}
-          </a>
+    <section aria-labelledby="spot-h" className={`mt-6 rounded-md border-2 p-5 ${hint ? "border-line" : "border-dashed border-maize"}`}>
+      <h2 id="spot-h" className="display text-2xl">{hint ? "You're set" : "Get your link by email"}</h2>
+      {hint && !editing ? (
+        <p className="mt-2 text-dim">
+          Your link and a reminder on the day go to <strong className="text-ink">{hint}</strong>. Open it from the email and you&apos;re back in as you.
+        </p>
+      ) : (
+        <>
+          <p className="mt-2 text-dim">
+            {inApp
+              ? `${inApp} doesn't always keep you signed in. Get your personal link by email and you can get back in from any phone or browser. Optional.`
+              : "We'll email your personal link and a reminder on the day, so you can get back in from any phone or browser. Optional."}
+          </p>
+          <form
+            className="mt-3 flex flex-col gap-2 sm:flex-row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(async () => {
+                const r = await setGuestEmail(token, email);
+                if (r && "hint" in r) {
+                  setHint(r.hint);
+                  setEditing(false);
+                  setEmail("");
+                }
+                return r;
+              }, "Sent. Check your email (and spam, just in case).");
+            }}
+          >
+            <label htmlFor="guest-email" className="sr-only">Your email</label>
+            <input
+              id="guest-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@email.com"
+              maxLength={254}
+              className="field sm:flex-1"
+            />
+            <button disabled={pending || !email.includes("@")} className={`${BTN_PRIMARY} shrink-0`}>
+              {pending ? "Sending…" : "Email me my link"}
+            </button>
+          </form>
+          <p className="mt-2 text-xs text-dim">Only used for this night: nobody else sees it, and it&apos;s deleted after the write-up goes up. Every email has unsubscribe.</p>
+        </>
+      )}
+      {msg && <p role="status" className={`mt-2 text-sm ${msg.ok ? "text-maize" : "text-pink"}`}>{msg.text}</p>}
+      <div className="-mx-2 mt-2 flex flex-wrap">
+        {hint && !editing && (
+          <>
+            <button type="button" onClick={() => setEditing(true)} className="inline-flex min-h-11 items-center px-2 text-sm text-dim underline hover:text-maize">Change email</button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => run(async () => { const r = await removeGuestEmail(token); if (r && "ok" in r) { setHint(null); setEditing(true); } return r; }, "Email removed.")}
+              className="inline-flex min-h-11 items-center px-2 text-sm text-dim underline hover:text-pink"
+            >
+              Stop emails
+            </button>
+          </>
         )}
+        <button type="button" onClick={copy} className="inline-flex min-h-11 items-center px-2 text-sm text-dim underline hover:text-maize">
+          {copied ? "Copied. Don't share it: it signs in as you." : "Or copy my link"}
+        </button>
       </div>
-      <p className="mt-3 text-xs text-dim">Don&apos;t share this one: it signs in as you. Share the regular invite instead.</p>
     </section>
   );
 }
@@ -675,17 +728,109 @@ function Uploader({ token }: { token: string }) {
   );
 }
 
+/**
+ * The guest's side of the story. Autosaves twice over: to this phone as they
+ * type (so a closed tab or a Snapchat reload never loses it) and to the
+ * server a couple of seconds after they stop typing.
+ */
 function Account({ token, account, defaultName, count }: { token: string; account: { nickname: string; body: string } | null; defaultName: string; count: number }) {
+  const key = `ftcu-story:${token}`;
   const [nickname, setNickname] = useState(account?.nickname ?? defaultName);
   const [body, setBody] = useState(account?.body ?? "");
-  const { pending, msg, run } = useAction();
+  const [saved, setSaved] = useState({ nickname: account?.nickname ?? "", body: account?.body ?? "" });
+  const [status, setStatus] = useState<{ kind: "idle" | "saving" | "saved" | "local" | "error" | "restored"; text?: string }>({ kind: "idle" });
+  const [hasSaved, setHasSaved] = useState(Boolean(account));
+  const saving = useRef(false);
+
+  // Bring back anything typed on this phone that never reached the server.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return;
+      const local = JSON.parse(raw) as { nickname?: string; body?: string };
+      if (local.body && local.body.trim() && local.body !== (account?.body ?? "")) {
+        setBody(local.body);
+        if (local.nickname) setNickname(local.nickname);
+        setStatus({ kind: "restored", text: "Brought back what you were writing on this phone." });
+      }
+    } catch {
+      // storage blocked: server autosave still works
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Keep a copy on the phone on every keystroke.
+  useEffect(() => {
+    try {
+      if (body.trim()) localStorage.setItem(key, JSON.stringify({ nickname, body }));
+    } catch {
+      // ignore
+    }
+  }, [key, nickname, body]);
+
+  const save = useCallback(
+    async (manual: boolean) => {
+      const n = nickname.trim();
+      const b = body.trim();
+      if (saving.current) return;
+      if (!manual && n === saved.nickname.trim() && b === saved.body.trim()) return;
+      if (!n || b.length < 20) {
+        if (manual) setStatus({ kind: "error", text: !n ? "Add your name or nickname first." : "Give us a little more than that. What actually happened?" });
+        else if (b) setStatus({ kind: "local", text: !n ? "Saved on this phone. Add your name to save it for real." : "Saved on this phone. Keep going." });
+        return;
+      }
+      saving.current = true;
+      setStatus((prev) => ({ kind: "saving", text: prev.text?.startsWith("Brought back") ? prev.text : undefined }));
+      try {
+        const r = await saveAccount(token, nickname, body);
+        if (r && "error" in r) setStatus({ kind: "error", text: r.error });
+        else {
+          setSaved({ nickname, body });
+          setHasSaved(true);
+          setStatus((prev) => ({
+            kind: "saved",
+            text: manual
+              ? "Saved. You can keep editing until the post drops."
+              : prev.kind === "restored" || prev.text?.startsWith("Brought back")
+                ? "Brought back what you were writing on this phone, and saved it."
+                : "Saved",
+          }));
+          try {
+            localStorage.removeItem(key);
+          } catch {
+            // ignore
+          }
+        }
+      } catch {
+        setStatus({ kind: "local", text: "Couldn't reach the server. It's saved on this phone; we'll try again." });
+      } finally {
+        saving.current = false;
+      }
+    },
+    [token, key, nickname, body, saved],
+  );
+
+  // Autosave 2.5s after they stop typing, and when they leave the page.
+  useEffect(() => {
+    const t = setTimeout(() => save(false), 2500);
+    return () => clearTimeout(t);
+  }, [nickname, body, save]);
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === "hidden") save(false);
+    };
+    document.addEventListener("visibilitychange", flush);
+    return () => document.removeEventListener("visibilitychange", flush);
+  }, [save]);
+
+  const color = status.kind === "error" ? "text-pink" : status.kind === "saving" || status.kind === "local" ? "text-dim" : "text-maize";
   return (
     <section id="story" className="mt-14 scroll-mt-4">
       <h2 className="display text-3xl">Your side of the story</h2>
       <p className="mt-2 text-dim">
         What happened, from where you were standing. Times, prices, the line, who did what. Use nicknames for other people unless they said yes. Claude stitches everyone&apos;s version into one post.
       </p>
-      {count > 0 && <p className="mono mt-3 text-maize">{plural(count, "account")} in so far</p>}
+      {count > 0 && <p className="mono mt-3 text-maize">{plural(count, "story", "stories")} in so far</p>}
       <label htmlFor="acct-nick" className="mt-5 block font-bold">Your name or nickname <span className="font-normal text-dim">(this is what shows up)</span></label>
       <input
         id="acct-nick"
@@ -701,22 +846,22 @@ function Account({ token, account, defaultName, count }: { token: string; accoun
         id="acct-body"
         value={body}
         onChange={(e) => setBody(e.target.value)}
+        onBlur={() => save(false)}
         rows={6}
         maxLength={4000}
         className="field mt-2 leading-relaxed"
         placeholder="We got there at 10:40, which everyone agreed was too early…"
       />
-      <p className="mt-1 text-right text-xs text-dim">{body.length} / 4000</p>
+      <div className="mt-1 flex items-start justify-between gap-3 text-xs">
+        <p role="status" aria-live="polite" className={`min-w-0 ${color}`}>
+          {status.kind === "saving" ? "Saving…" : status.text ?? "Saves automatically as you type."}
+        </p>
+        <p className="shrink-0 text-dim">{body.length} / 4000</p>
+      </div>
       <GuestClaude token={token} text={body} onUse={setBody} />
-      <button
-        type="button"
-        disabled={pending}
-        onClick={() => run(() => saveAccount(token, nickname, body), account ? "Updated." : "Saved. You can edit it until the post drops.")}
-        className={`${BTN_PRIMARY} mt-2 w-full sm:w-auto`}
-      >
-        {pending ? "Saving…" : account ? "Update my account" : "Save my account"}
+      <button type="button" disabled={status.kind === "saving"} onClick={() => save(true)} className={`${BTN_PRIMARY} mt-2 w-full sm:w-auto`}>
+        {status.kind === "saving" ? "Saving…" : hasSaved ? "Save changes" : "Save my story"}
       </button>
-      {msg && <p role="status" className={`mt-3 ${msg.ok ? "text-maize" : "text-pink"}`}>{msg.text}</p>}
     </section>
   );
 }
@@ -932,6 +1077,7 @@ export function DropClient(props: {
   guestInfo: GuestInfo;
   account: { nickname: string; body: string } | null;
   me: { path: string; ics: string; google: string } | null;
+  emailHint: string | null;
   nightName: string;
   songs: GuestSong[];
   places: { approved: Venue[]; mine: Array<{ id: string; name: string; url: string | null; kind: string }> };
@@ -959,7 +1105,7 @@ export function DropClient(props: {
       {canAct && !verified && <Turnstile token={token} siteKey={props.siteKey} phase={phase} />}
       {verified && phase === "invite" && <Rsvp token={token} current={props.rsvp} info={props.guestInfo} />}
       {(phase === "invite" || phase === "live") && <ShareInvite token={token} name={props.nightName} rsvped={Boolean(props.rsvp)} />}
-      {verified && canAct && props.me && <SaveSpot me={props.me} />}
+      {verified && canAct && props.me && <SaveSpot token={token} me={props.me} emailHint={props.emailHint} />}
       {verified && canAct && <GuestSongs token={token} songs={props.songs} />}
       {verified && canAct && phase !== "invite" && <GuestPlaces token={token} places={props.places} />}
       {verified && phase !== "invite" && <JumpNav links={jump} />}

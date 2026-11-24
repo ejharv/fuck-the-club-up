@@ -8,6 +8,52 @@ import { isReviewable, latestDraft, phaseOf, nameTaken } from "@/lib/nights";
 import { LIMITS } from "@/lib/synthesis";
 import { songsFromLines } from "@/lib/tracks";
 import { cleanVenueUrl, placeKey } from "@/lib/venues";
+import { MAX_EMAILS_PER_NIGHT, cleanEmail, emailHash, emailHint, sealEmail, sendGuestEmail } from "@/lib/email";
+import { rateLimited } from "@/lib/nights";
+
+/** Optional: email me my link + reminders. One address per phone per night; the address is never shown to anyone. */
+export async function setGuestEmail(token: string, emailRaw: string): Promise<DropResult | { ok: true; hint: string }> {
+  const ctx = await ctxFor(token);
+  if ("error" in ctx) return ctx;
+  if (!isReviewable(ctx.night)) return { error: "This night already dropped." };
+  const email = cleanEmail(emailRaw);
+  if (!email) return { error: "That email doesn't look right." };
+  if (await rateLimited(ctx.env, `email:${await ctx.ipHash()}`)) return { error: "Slow down a sec and try again." };
+  const DB = ctx.env.DB;
+  const hash = await emailHash(ctx.env.AUTH_SECRET, email);
+  const [mine, taken, count] = await Promise.all([
+    DB.prepare("SELECT email_hash, changes FROM night_emails WHERE night_id = ? AND device_id = ?").bind(ctx.night.id, ctx.device).first<{ email_hash: string; changes: number }>(),
+    DB.prepare("SELECT device_id FROM night_emails WHERE night_id = ? AND email_hash = ?").bind(ctx.night.id, hash).first<{ device_id: string }>(),
+    DB.prepare("SELECT COUNT(*) AS n FROM night_emails WHERE night_id = ?").bind(ctx.night.id).first<{ n: number }>(),
+  ]);
+  const hint = emailHint(email);
+  if (mine?.email_hash === hash) return { ok: true, hint };
+  if (taken && taken.device_id !== ctx.device) return { error: "That email is already set up for this night on another phone. Use the link in that email." };
+  if (mine && mine.changes >= 3) return { error: "You've changed your email a few times already. Ask the host if you need help." };
+  if (!mine && (count?.n ?? 0) >= MAX_EMAILS_PER_NIGHT) return { error: "Email reminders are full for this night." };
+  const sealed = await sealEmail(ctx.env.AUTH_SECRET, email);
+  const now = new Date().toISOString();
+  await DB.prepare(
+    `INSERT INTO night_emails (night_id, device_id, email_enc, email_hash, email_hint, created_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (night_id, device_id) DO UPDATE SET email_enc = excluded.email_enc, email_hash = excluded.email_hash,
+       email_hint = excluded.email_hint, changes = changes + 1, sent_confirm = NULL`,
+  )
+    .bind(ctx.night.id, ctx.device, sealed, hash, hint, now)
+    .run();
+  const tokenRow = await DB.prepare("SELECT token_enc FROM nights WHERE id = ?").bind(ctx.night.id).first<{ token_enc: string | null }>();
+  const sent = await sendGuestEmail(ctx.env, "confirm", { email_enc: sealed, device_id: ctx.device }, { ...ctx.night, token_enc: tokenRow?.token_enc ?? null }).catch(() => false);
+  if (sent) await DB.prepare("UPDATE night_emails SET sent_confirm = ? WHERE night_id = ? AND device_id = ?").bind(now, ctx.night.id, ctx.device).run();
+  revalidatePath(`/drop/${token}`);
+  return { ok: true, hint };
+}
+
+export async function removeGuestEmail(token: string): Promise<DropResult> {
+  const ctx = await ctxFor(token);
+  if ("error" in ctx) return ctx;
+  await ctx.env.DB.prepare("DELETE FROM night_emails WHERE night_id = ? AND device_id = ?").bind(ctx.night.id, ctx.device).run();
+  revalidatePath(`/drop/${token}`);
+  return { ok: true };
+}
 
 const PLACES_PER_GUEST = 5;
 const PLACES_PER_NIGHT = 30;
@@ -148,7 +194,7 @@ export async function saveAccount(token: string, nickname: string, body: string)
   const ctx = await ctxFor(token);
   if ("error" in ctx) return ctx;
   const phase = phaseOf(ctx.night);
-  if (phase === "invite") return { error: "Accounts open when the party starts." };
+  if (phase === "invite") return { error: "Stories open when the party starts." };
   if (!isReviewable(ctx.night)) return { error: "This night already dropped." };
   const name = nick(nickname);
   const text = clean(body, LIMITS.accountChars);
@@ -197,7 +243,7 @@ export async function setApproval(token: string, version: number, approve: boole
   const wrote = await ctx.env.DB.prepare("SELECT 1 FROM night_accounts WHERE night_id = ? AND device_id = ?")
     .bind(ctx.night.id, ctx.device)
     .first();
-  if (!wrote) return { error: "Only people who wrote an account approve the draft." };
+  if (!wrote) return { error: "Only people who wrote their side of the story approve the draft." };
   await ctx.env.DB.prepare(
     approve
       ? "INSERT OR IGNORE INTO night_approvals (night_id, version, device_id, created_at) VALUES (?, ?, ?, ?)"

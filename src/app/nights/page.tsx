@@ -56,7 +56,7 @@ export default async function NightsPage() {
                   <span className={`mono rounded border px-1.5 py-0.5 ${phaseOf(n) === "after" && n.status !== "reviewing" ? "border-maize text-maize" : phaseOf(n) === "live" ? "border-pink text-pink" : "border-line text-dim"}`}>
                     {n.status === "reviewing" ? "Drop scheduled" : phaseLabel[phaseOf(n)]}
                   </span>
-                  <span>{n.going} going · {n.files} files · {n.accounts} accounts</span>
+                  <span>{n.going} going · {n.files} files · {n.accounts} {n.accounts === 1 ? "story" : "stories"}</span>
                 </span>
                 <span aria-hidden className="col-start-2 row-span-3 row-start-1 text-2xl text-dim group-hover:text-maize sm:col-start-4 sm:row-span-1">›</span>
               </Link>

@@ -27,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { results: accounts } = await env.DB.prepare("SELECT nickname, body FROM night_accounts WHERE night_id = ? ORDER BY updated_at")
     .bind(id)
     .all<{ nickname: string; body: string }>();
-  if (!accounts.length) return NextResponse.json({ error: "Nobody has written their account yet. Share the link first." }, { status: 400 });
+  if (!accounts.length) return NextResponse.json({ error: "Nobody has written their side of the story yet. Share the link first." }, { status: 400 });
 
   const venues = parseVenues(night.venues);
   const previous = rewrite ? await latestDraft(id) : null;

@@ -13,7 +13,8 @@ export const DEFAULT_PRIVACY = `Fuck The Club Up ("we", "us") runs fucktheclubup
 
 **If you use a party link** (an invite or photo drop for a night), you don't sign in. We store:
 - what you choose to give us: an optional nickname, your RSVP, your account of the night, notes on the draft, your approval, and the photos, videos and audio you upload;
-- a random ID in a cookie on your device, so you can edit your own account and approve once;
+- if you choose to, your email address, used only to send your personal link and up to three emails about that night (a reminder on the day, when the draft is ready, and when it's posted). It's encrypted, never shown to anyone (including hosts), and deleted after the last email, when you unsubscribe, or when the night is deleted;
+- a random ID in a cookie on your device, so you can edit your own story and approve once;
 - a salted, one-way hash of your IP address, for rate limits and abuse prevention. We never store the IP itself.
 
 Photos are re-encoded in your browser before upload, which removes location and camera data. **Videos keep their original data, including any location**, so check your phone's settings if that matters to you.
@@ -35,6 +36,7 @@ We don't sell your data, we don't run ads, and we don't use third-party analytic
 - **Cloudflare** hosts the site, stores the database and files, and runs the bot check (Turnstile).
 - **Google** handles sign-in for crew members.
 - **Amazon Web Services (Bedrock)** runs the Claude model that writes drafts. Per AWS, prompts aren't used to train models.
+- **Amazon Web Services (SES)** sends the optional party emails.
 - Embedded players (**YouTube, Spotify, SoundCloud**) load from those services and follow their own privacy policies.
 
 ## What's public
