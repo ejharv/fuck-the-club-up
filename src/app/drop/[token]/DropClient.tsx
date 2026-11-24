@@ -179,6 +179,59 @@ function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null;
   );
 }
 
+/** Small, capped Claude help for a guest's story. Suggestions only replace the text on "Use this". */
+function GuestClaude({ token, text, onUse }: { token: string; text: string; onUse: (t: string) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [left, setLeft] = useState<number | null>(null);
+  const [s, setS] = useState<{ text: string; headsUp: string[] } | null>(null);
+  const modes = [
+    ["polish", "Clean it up"],
+    ["funnier", "Make it funnier"],
+    ["story", "Turn my notes into a story"],
+  ] as const;
+  async function ask(mode: string) {
+    setBusy(mode);
+    setErr(null);
+    setS(null);
+    try {
+      const res = await fetch(`/api/drop/${token}/assist`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, text }) });
+      const data = (await res.json().catch(() => ({}))) as { text?: string; headsUp?: string[]; left?: number; error?: string };
+      if (typeof data.left === "number") setLeft(data.left);
+      if (!res.ok || !data.text) setErr(data.error ?? "Claude couldn't help with that one.");
+      else setS({ text: data.text, headsUp: data.headsUp ?? [] });
+    } catch {
+      setErr("Couldn't reach Claude. Check your connection.");
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <div className="mt-3 rounded-md border border-dashed border-pink/60 p-3">
+      <p className="text-sm"><span className="mono text-pink">Ask Claude</span> <span className="text-dim">{left === null ? "A few tries per person." : `${left} ${left === 1 ? "try" : "tries"} left.`}</span></p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        {modes.map(([m, label]) => (
+          <button key={m} type="button" disabled={Boolean(busy) || text.trim().length < 10 || left === 0} onClick={() => ask(m)} className="min-h-11 rounded-full border border-line px-3 text-sm font-bold hover:border-pink disabled:opacity-50">
+            {busy === m ? "Working…" : label}
+          </button>
+        ))}
+      </div>
+      {err && <p role="alert" className="mt-2 text-sm text-pink">{err}</p>}
+      {s && (
+        <div className="mt-3 rounded bg-night p-3">
+          {s.headsUp.length > 0 && <ul className="mb-2 space-y-1 text-sm text-maize">{s.headsUp.map((h, i) => <li key={i}>{h}</li>)}</ul>}
+          <p className="whitespace-pre-wrap leading-relaxed">{s.text}</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={() => { onUse(s.text); setS(null); }} className="min-h-11 rounded-full bg-pink px-5 font-bold text-night">Use this</button>
+            <button type="button" onClick={() => setS(null)} className="min-h-11 rounded-full border border-ink px-4 font-bold">Keep mine</button>
+          </div>
+          <p className="mt-2 text-xs text-dim">Using it only changes the box above. Hit save to keep it.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type UploadItem = { id: string; name: string; progress: number; done: boolean; error?: string };
 
 function Uploader({ token }: { token: string }) {
@@ -370,6 +423,7 @@ function Account({ token, account, count }: { token: string; account: { nickname
         placeholder="We got there at 10:40, which everyone agreed was too early…"
       />
       <p className="mt-1 text-right text-xs text-dim">{body.length} / 4000</p>
+      <GuestClaude token={token} text={body} onUse={setBody} />
       <button
         type="button"
         disabled={pending}
