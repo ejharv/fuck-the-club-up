@@ -1,18 +1,21 @@
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDay } from "@/lib/format";
 
 /** The dashed maize "wristband" of quick facts that opens every post. */
 export function Wristband({
   postedAt,
+  nightOf,
   night,
   damage,
   rideHome,
 }: {
   postedAt: string;
+  nightOf: string | null;
   night: string | null;
   damage: string | null;
   rideHome: string | null;
 }) {
   const facts = [
+    ...(nightOf ? [["Night of", formatDay(nightOf)]] : []),
     ["Posted", formatDate(postedAt)],
     ["The night", night],
     ["Damage", damage],

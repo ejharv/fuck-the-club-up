@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { PostGrid } from "@/components/PostCard";
 import { SectionsGrid } from "@/components/SectionsGrid";
-import { listPosts } from "@/lib/db";
+import { listNewThisWeek, listPosts } from "@/lib/db";
 import { cf } from "@/lib/env";
 import { currentMember } from "@/lib/session";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { alternates: { canonical: "/" } };
 
 export default async function Home() {
-  const [posts, env, member] = await Promise.all([listPosts({ limit: 12 }), cf(), currentMember()]);
+  const [posts, fresh, env, member] = await Promise.all([listPosts({ limit: 12 }), listNewThisWeek(), cf(), currentMember()]);
 
   return (
     <>
@@ -26,6 +26,16 @@ export default async function Home() {
           The nights, the places, and the stories that turned into lore. Told by the people who remember them.
         </p>
       </section>
+
+      {fresh.length > 0 && (
+        <section aria-labelledby="fresh" className="mx-auto mb-16 max-w-6xl px-4 sm:px-6">
+          <h2 id="fresh" className="display text-3xl text-pink">New this week</h2>
+          <p className="mt-2 text-dim">Just posted, about nights from a while back.</p>
+          <div className="mt-6">
+            <PostGrid posts={fresh} mediaBase={env.MEDIA_PUBLIC_URL} />
+          </div>
+        </section>
+      )}
 
       <section aria-labelledby="latest" className="mx-auto max-w-6xl px-4 sm:px-6">
         <h2 id="latest" className="display text-4xl">Latest</h2>

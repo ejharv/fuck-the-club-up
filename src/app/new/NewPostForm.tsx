@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { createPost } from "@/app/actions";
 import { ACCEPT_ATTR, ALLOWED_TYPES, MAX_BYTES, MAX_FILES_PER_POST } from "@/lib/media-rules";
 import { toEmbed } from "@/lib/embeds";
+import { putWithProgress as put, scrubPhoto } from "@/lib/scrub-photo";
 import { HOUSE_RULES, SECTIONS } from "@/lib/sections";
 
 type Item = {
@@ -20,47 +21,7 @@ type Item = {
   url?: string;
 };
 
-function put(url: string, file: File, headers: Record<string, string>, onProgress: (p: number) => void) {
-  return new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
-    xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload failed (${xhr.status}).`)));
-    xhr.onerror = () => reject(new Error("Upload failed. Check your connection and try again."));
-    xhr.send(file);
-  });
-}
-
-const MAX_EDGE = 2560;
-
-/**
- * Re-encode photos in the browser before upload. Drawing to a canvas drops all
- * EXIF data (GPS, device, timestamps) and caps the size. GIFs are left alone so
- * animations survive. If a photo can't be decoded it's rejected, never uploaded
- * with its metadata intact.
- */
-async function scrubPhoto(file: File): Promise<File> {
-  if (!/^image\/(jpeg|png|webp|avif)$/.test(file.type)) return file;
-  try {
-    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    bitmap.close();
-    const type = file.type === "image/png" ? "image/png" : "image/jpeg";
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, type, 0.88));
-    if (!blob) throw new Error("encode failed");
-    const name = file.name.replace(/\.[^.]+$/, type === "image/png" ? ".png" : ".jpg");
-    return new File([blob], name, { type });
-  } catch {
-    throw new Error(`${file.name} couldn't be processed. Try exporting it as a JPG.`);
-  }
-}
-
-export function NewPostForm() {
+export function NewPostForm({ today }: { today: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [link, setLink] = useState("");
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -130,6 +91,7 @@ export function NewPostForm() {
         dek: String(form.get("dek") ?? ""),
         section: String(form.get("section") ?? ""),
         night: String(form.get("night") ?? ""),
+        nightOf: String(form.get("nightOf") ?? ""),
         damage: String(form.get("damage") ?? ""),
         rideHome: String(form.get("rideHome") ?? ""),
         body: String(form.get("body") ?? ""),
@@ -165,6 +127,11 @@ export function NewPostForm() {
 
       <fieldset className="rounded-md border-2 border-dashed border-maize p-4 sm:p-5">
         <legend className="mono px-2 text-maize">Wristband</legend>
+        <div className="mb-4">
+          <label htmlFor="nightOf" className="mb-2 block text-sm font-bold">When was the night?</label>
+          <input id="nightOf" name="nightOf" type="date" min="2000-01-01" max={today} className="field sm:w-56" />
+          <p className="mt-1 text-sm text-dim">Optional. An old night slots into the timeline where it happened.</p>
+        </div>
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
             <label htmlFor="night" className="mb-2 block text-sm font-bold">The night</label>

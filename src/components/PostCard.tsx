@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { PostRow } from "@/lib/db";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDay, isBackdated } from "@/lib/format";
 import { mediaUrl } from "@/lib/media-url";
 import { sectionBySlug } from "@/lib/sections";
 
@@ -20,7 +20,10 @@ export function PostCard({ post, mediaBase }: { post: PostRow; mediaBase: string
       <div className="flex flex-1 flex-col gap-3 p-5">
         <p className="mono flex flex-wrap items-center gap-x-3 gap-y-1 text-maize">
           <span>{section?.name ?? post.section}</span>
-          <span className="text-dim">{formatDate(post.published_at)}</span>
+          <span className="text-dim">{post.night_of ? formatDay(post.night_of) : formatDate(post.published_at)}</span>
+          {isBackdated(post.night_of, post.published_at) && (
+            <span className="text-dim normal-case tracking-normal">Posted {formatDate(post.published_at)}</span>
+          )}
           {post.placeholder ? <PlaceholderBadge /> : null}
         </p>
         <h3 className="display text-2xl sm:text-[1.7rem]">

@@ -6,8 +6,8 @@ import { signIn, signOut } from "@/auth";
 import { cf } from "@/lib/env";
 import { toEmbed } from "@/lib/embeds";
 import { ALLOWED_TYPES, MAX_BYTES, MAX_FILES_PER_POST, type FileKind } from "@/lib/media-rules";
+import { clean, insertPostStatements, validatePostFields, type MediaInsert, type PostFieldsInput } from "@/lib/post-fields";
 import { safePath } from "@/lib/safe-path";
-import { sectionBySlug } from "@/lib/sections";
 import { NotAllowed, requireAdmin, requireMember } from "@/lib/session";
 
 export async function signInWithGoogle(formData: FormData) {
@@ -20,36 +20,10 @@ export async function signOutAction() {
 
 export type ActionResult = { error: string } | undefined;
 
-export type NewPostInput = {
-  title: string;
-  dek?: string;
-  section: string;
-  night?: string;
-  damage?: string;
-  rideHome?: string;
-  body: string;
-  /** House rule 1: everyone named or shown agreed. */
-  consent: boolean;
+export type NewPostInput = PostFieldsInput & {
   media: Array<{ key?: string; url?: string; caption?: string }>;
   coverKey?: string;
 };
-
-const clean = (v: unknown, max: number) => {
-  const s = typeof v === "string" ? v.trim() : "";
-  return s.length ? s.slice(0, max) : null;
-};
-
-function slugify(title: string) {
-  const base = title
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[^\w\s-]/g, "")
-    .trim()
-    .replace(/[\s_-]+/g, "-")
-    .slice(0, 60)
-    .replace(/-+$/, "");
-  return `${base || "post"}-${crypto.randomUUID().slice(0, 6)}`;
-}
 
 export async function createPost(input: NewPostInput): Promise<ActionResult> {
   let slug: string;
@@ -57,24 +31,15 @@ export async function createPost(input: NewPostInput): Promise<ActionResult> {
     const member = await requireMember();
     const env = await cf();
 
-    const title = clean(input.title, 140);
-    const body = clean(input.body, 60_000);
-    if (!title) return { error: "Give the post a title." };
-    if (!body) return { error: "Write the post before publishing it." };
-    const section = sectionBySlug(String(input.section ?? ""))?.slug;
-    if (!section) return { error: "Pick a section for the post." };
-    const rideHome = clean(input.rideHome, 160);
-    if (section === "night-reports" && !rideHome) return { error: "Night reports have to say how everyone got home." };
-    if (input.consent !== true) {
-      return { error: "Confirm that everyone named or shown in this post said yes. Use nicknames for anyone who didn't." };
-    }
+    const fields = validatePostFields(input);
+    if ("error" in fields) return fields;
     if (!Array.isArray(input.media) || input.media.length > MAX_FILES_PER_POST) {
       return { error: `Posts can have up to ${MAX_FILES_PER_POST} photos, videos, tracks and links.` };
     }
 
     // Every file must be an upload this member made, actually present in R2,
     // and still matching the type and size it was signed for.
-    const media: Array<{ kind: string; key: string | null; url: string | null; type: string | null; caption: string | null }> = [];
+    const media: MediaInsert[] = [];
     for (const item of input.media) {
       const caption = clean(item.caption, 300);
       if (item.url) {
@@ -102,34 +67,112 @@ export async function createPost(input: NewPostInput): Promise<ActionResult> {
     const firstPhoto = media.find((m) => m.kind === "photo")?.key ?? null;
     const coverKey = media.some((m) => m.kind === "photo" && m.key === input.coverKey) ? input.coverKey! : firstPhoto;
 
-    const id = crypto.randomUUID();
-    slug = slugify(title);
-    const now = new Date().toISOString();
-    const stmts = [
-      env.DB.prepare(
-        `INSERT INTO posts (id, slug, title, dek, section, night, damage, ride_home, body, cover_key,
-                            author_email, author_name, published_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(
-        id, slug, title, clean(input.dek, 200), section, clean(input.night, 80), clean(input.damage, 80),
-        rideHome, body, coverKey, member.email, member.name, now, now,
-      ),
-      ...media.map((m, i) =>
-        env.DB.prepare(
-          "INSERT INTO media (id, post_id, position, kind, r2_key, url, content_type, caption) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        ).bind(crypto.randomUUID(), id, i, m.kind, m.key, m.url, m.type, m.caption),
-      ),
+    const insert = insertPostStatements(env.DB, fields, media, coverKey, member.email);
+    slug = insert.slug;
+    await env.DB.batch([
+      ...insert.stmts,
       ...media
         .filter((m) => m.key)
         .map((m) => env.DB.prepare("UPDATE uploads SET used = 1 WHERE r2_key = ?").bind(m.key)),
-    ];
-    await env.DB.batch(stmts);
+    ]);
   } catch (e) {
     if (e instanceof NotAllowed) return { error: e.message };
     throw e;
   }
   revalidatePath("/");
   redirect(`/posts/${slug}`);
+}
+
+/** Author or admin. Returns the post's id and author. */
+async function requirePostEditor(postId: string) {
+  const member = await requireMember();
+  const env = await cf();
+  const post = await env.DB.prepare("SELECT id, slug, author_email FROM posts WHERE id = ?")
+    .bind(postId)
+    .first<{ id: string; slug: string; author_email: string }>();
+  if (!post) throw new NotAllowed("That post doesn't exist anymore.");
+  if (post.author_email !== member.email && member.role !== "admin") {
+    throw new NotAllowed("Only the person who posted this, or an admin, can change it.");
+  }
+  return { env, member, post };
+}
+
+export type EditPostInput = PostFieldsInput & {
+  id: string;
+  media: Array<{ id: string; caption?: string }>;
+  removeMediaIds: string[];
+  coverMediaId?: string | null;
+};
+
+export async function updatePost(input: EditPostInput): Promise<ActionResult> {
+  let slug: string;
+  try {
+    const { env, post } = await requirePostEditor(String(input.id));
+    slug = post.slug;
+    const fields = validatePostFields(input);
+    if ("error" in fields) return fields;
+
+    const { results: existing } = await env.DB.prepare("SELECT id, kind, r2_key FROM media WHERE post_id = ?")
+      .bind(post.id)
+      .all<{ id: string; kind: string; r2_key: string | null }>();
+    const byId = new Map(existing.map((m) => [m.id, m]));
+    const remove = (input.removeMediaIds ?? []).filter((id) => byId.has(id));
+    const keep = existing.filter((m) => !remove.includes(m.id));
+    const cover = keep.find((m) => m.id === input.coverMediaId && m.kind === "photo") ?? keep.find((m) => m.kind === "photo");
+
+    const now = new Date().toISOString();
+    await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE posts SET title = ?, dek = ?, section = ?, night = ?, night_of = ?, damage = ?, ride_home = ?, body = ?,
+                          cover_key = ?, updated_at = ? WHERE id = ?`,
+      ).bind(fields.title, fields.dek, fields.section, fields.night, fields.nightOf, fields.damage, fields.rideHome,
+        fields.body, cover?.r2_key ?? null, now, post.id),
+      ...(input.media ?? [])
+        .filter((m) => byId.has(m.id) && !remove.includes(m.id))
+        .map((m) => env.DB.prepare("UPDATE media SET caption = ? WHERE id = ? AND post_id = ?").bind(clean(m.caption, 300), m.id, post.id)),
+      ...remove.map((id) => env.DB.prepare("DELETE FROM media WHERE id = ? AND post_id = ?").bind(id, post.id)),
+    ]);
+    const keys = remove.map((id) => byId.get(id)!.r2_key).filter((k): k is string => Boolean(k));
+    if (keys.length) await env.MEDIA.delete(keys);
+  } catch (e) {
+    if (e instanceof NotAllowed) return { error: e.message };
+    throw e;
+  }
+  revalidatePath("/");
+  revalidatePath(`/posts/${slug}`);
+  redirect(`/posts/${slug}`);
+}
+
+async function adminPost(postId: string) {
+  await requireAdmin();
+  const env = await cf();
+  const post = await env.DB.prepare("SELECT id, slug FROM posts WHERE id = ?").bind(postId).first<{ id: string; slug: string }>();
+  if (!post) throw new NotAllowed("That post doesn't exist anymore.");
+  return post;
+}
+
+/** Fast takedown of one photo/video/track from a published post. */
+export async function deleteMedia(formData: FormData): Promise<void> {
+  const mediaId = String(formData.get("mediaId") ?? "");
+  const env = await cf();
+  const row = await env.DB.prepare("SELECT post_id, r2_key FROM media WHERE id = ?")
+    .bind(mediaId)
+    .first<{ post_id: string; r2_key: string | null }>();
+  if (!row) return;
+  const takedownId = formData.get("takedownId");
+  const { post } = takedownId ? { post: await adminPost(row.post_id) } : await requirePostEditor(row.post_id);
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM media WHERE id = ?").bind(mediaId),
+    env.DB.prepare("UPDATE posts SET cover_key = NULL WHERE id = ? AND cover_key = ?").bind(post.id, row.r2_key),
+  ]);
+  if (row.r2_key) await env.MEDIA.delete(row.r2_key);
+  if (takedownId) {
+    await env.DB.prepare("UPDATE takedown_requests SET status = 'done', resolved_at = ? WHERE id = ?")
+      .bind(new Date().toISOString(), String(takedownId))
+      .run();
+  }
+  revalidatePath(`/posts/${post.slug}`);
+  revalidatePath("/takedowns");
 }
 
 export async function deletePost(formData: FormData): Promise<void> {

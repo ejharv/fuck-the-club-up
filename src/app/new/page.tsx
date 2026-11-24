@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { todayInDetroit } from "@/lib/post-fields";
 import { currentMember } from "@/lib/session";
 import { NewPostForm } from "./NewPostForm";
 
@@ -10,7 +11,7 @@ export default async function NewPost() {
   return (
     <section className="mx-auto max-w-3xl px-4 pt-12 sm:px-6">
       <h1 className="display text-[clamp(3rem,9vw,5.5rem)]">New post</h1>
-      <NewPostForm />
+      <NewPostForm today={todayInDetroit()} />
     </section>
   );
 }

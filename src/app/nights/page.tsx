@@ -1,0 +1,55 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { cf } from "@/lib/env";
+import { formatDay } from "@/lib/format";
+import { phaseOf, type Night } from "@/lib/nights";
+import { currentMember } from "@/lib/session";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Nights", robots: { index: false } };
+
+const phaseLabel = { invite: "Invite out", live: "Live: collecting", after: "Ready to review", dropped: "Dropped" } as const;
+
+export default async function NightsPage() {
+  const me = await currentMember();
+  if (!me) redirect("/login?next=/nights");
+  if (me.role !== "admin") redirect("/");
+  const env = await cf();
+  const { results } = await env.DB.prepare(
+    `SELECT n.*, (SELECT COUNT(*) FROM night_uploads u WHERE u.night_id = n.id AND u.uploaded = 1) AS files,
+            (SELECT COUNT(*) FROM night_accounts a WHERE a.night_id = n.id) AS accounts,
+            (SELECT COUNT(*) FROM night_rsvps r WHERE r.night_id = n.id AND r.answer = 'going') AS going
+       FROM nights n ORDER BY n.night_of DESC, n.created_at DESC`,
+  ).all<Night & { files: number; accounts: number; going: number }>();
+
+  return (
+    <section className="mx-auto max-w-4xl px-4 pt-12 sm:px-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className="display text-[clamp(3rem,9vw,5.5rem)]">Nights</h1>
+        <Link href="/nights/new" className="rounded-full bg-maize px-6 py-3 font-bold text-night hover:bg-ink">
+          New night
+        </Link>
+      </div>
+      <p className="mt-3 max-w-xl text-dim">
+        Each night gets one link: an invite before, a photo drop and everyone&apos;s story during and after, then the post.
+      </p>
+      {results.length ? (
+        <ul className="mt-10 border-t border-line">
+          {results.map((n) => (
+            <li key={n.id} className="border-b border-line">
+              <Link href={`/nights/${n.id}`} className="grid gap-1 py-5 hover:text-maize sm:grid-cols-[8rem_1fr_auto] sm:items-center sm:gap-6">
+                <span className="mono text-maize">{formatDay(n.night_of)}</span>
+                <span className="display text-2xl">{n.name}</span>
+                <span className="text-sm text-dim">
+                  {n.status === "reviewing" ? "Drop scheduled" : phaseLabel[phaseOf(n)]} · {n.going} going · {n.files} files · {n.accounts} accounts
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-10 text-dim">No nights yet. Start one and send the link to the group chat.</p>
+      )}
+    </section>
+  );
+}

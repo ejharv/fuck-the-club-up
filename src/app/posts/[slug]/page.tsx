@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { deletePost } from "@/app/actions";
+import { deleteMedia, deletePost } from "@/app/actions";
 import { Markdown } from "@/components/Markdown";
 import { PlaceholderBadge } from "@/components/PostCard";
 import { Wristband } from "@/components/Wristband";
@@ -29,8 +29,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-function MediaBlock({ item, base }: { item: MediaRow; base: string | undefined }) {
-  const caption = item.caption && <figcaption className="mt-2 text-sm text-dim">{item.caption}</figcaption>;
+function RemoveMedia({ id }: { id: string }) {
+  return (
+    <form action={deleteMedia} className="mt-2">
+      <input type="hidden" name="mediaId" value={id} />
+      <button className="mono text-dim underline underline-offset-4 hover:text-pink">Remove this</button>
+    </form>
+  );
+}
+
+function MediaBlock({ item, base, canEdit }: { item: MediaRow; base: string | undefined; canEdit: boolean }) {
+  const caption = (
+    <>
+      {item.caption && <figcaption className="mt-2 text-sm text-dim">{item.caption}</figcaption>}
+      {canEdit && <RemoveMedia id={item.id} />}
+    </>
+  );
   if (item.kind === "embed" && item.url) {
     const embed = toEmbed(item.url);
     if (!embed) return null;
@@ -63,6 +77,7 @@ function MediaBlock({ item, base }: { item: MediaRow; base: string | undefined }
       <figure className="rounded-md border border-line bg-night-2 p-4 sm:col-span-2">
         <p className="mono mb-3 text-maize">{item.caption ?? "Track from the night"}</p>
         <audio src={src} controls preload="none" className="w-full" />
+        {canEdit && <RemoveMedia id={item.id} />}
       </figure>
     );
   }
@@ -78,10 +93,10 @@ function MediaBlock({ item, base }: { item: MediaRow; base: string | undefined }
 export default async function PostPage({ params }: Props) {
   const found = await getPost((await params).slug);
   if (!found) notFound();
-  const [env, member] = await Promise.all([cf(), currentMember()]);
   const { post, media } = found;
+  const [env, member] = await Promise.all([cf(), currentMember()]);
   const section = sectionBySlug(post.section);
-  const canDelete = member && (member.email === post.author_email || member.role === "admin");
+  const canEdit = Boolean(member && (member.email === post.author_email || member.role === "admin"));
 
   return (
     <article className="mx-auto max-w-6xl px-4 pt-12 sm:px-6">
@@ -97,10 +112,16 @@ export default async function PostPage({ params }: Props) {
       </p>
       <h1 className="display mt-4 max-w-5xl text-[clamp(2.75rem,8vw,6.5rem)]">{post.title}</h1>
       {post.dek && <p className="mt-6 max-w-[55ch] text-2xl leading-snug">{post.dek}</p>}
-      <p className="mt-4 text-dim">{post.author_name ? `By ${post.author_name}` : "By the crew"}</p>
+      {canEdit && (
+        <p className="mt-4">
+          <Link href={`/posts/${post.slug}/edit`} className="mono text-maize underline underline-offset-4 hover:text-ink">
+            Edit post
+          </Link>
+        </p>
+      )}
 
       <div className="mt-8 max-w-4xl">
-        <Wristband postedAt={post.published_at} night={post.night} damage={post.damage} rideHome={post.ride_home} />
+        <Wristband postedAt={post.published_at} nightOf={post.night_of} night={post.night} damage={post.damage} rideHome={post.ride_home} />
       </div>
 
       <div className="mt-10">
@@ -110,13 +131,21 @@ export default async function PostPage({ params }: Props) {
       {media.length > 0 && (
         <section aria-label="Photos, videos and music" className="mt-16 grid max-w-4xl gap-6 sm:grid-cols-2">
           {media.map((m) => (
-            <MediaBlock key={m.id} item={m} base={env.MEDIA_PUBLIC_URL} />
+            <MediaBlock key={m.id} item={m} base={env.MEDIA_PUBLIC_URL} canEdit={canEdit} />
           ))}
         </section>
       )}
 
-      {canDelete && (
-        <form action={deletePost} className="mt-16 border-t border-line pt-6">
+      <p className="mt-16 border-t border-line pt-6 text-sm text-dim">
+        In something you want gone?{" "}
+        <Link href={`/takedown?post=${post.slug}`} className="underline underline-offset-4 hover:text-pink">
+          Ask for a takedown
+        </Link>
+        . No questions asked.
+      </p>
+
+      {canEdit && (
+        <form action={deletePost} className="mt-4">
           <input type="hidden" name="id" value={post.id} />
           <button className="text-sm text-dim underline underline-offset-4 hover:text-pink">Delete this post and its uploads</button>
         </form>

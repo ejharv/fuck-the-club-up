@@ -7,7 +7,13 @@ import { AwsClient } from "aws4fetch";
  * signed (aws4fetch skips them unless allHeaders is set), so the browser must
  * upload exactly the type and size that were approved.
  */
-export async function presignPut(env: CloudflareEnv, key: string, contentType: string, size: number): Promise<string> {
+export async function presignPut(
+  env: CloudflareEnv,
+  key: string,
+  contentType: string,
+  size: number,
+  bucket: string = env.R2_BUCKET_NAME,
+): Promise<string> {
   const client = new AwsClient({
     accessKeyId: env.R2_ACCESS_KEY_ID ?? "",
     secretAccessKey: env.R2_SECRET_ACCESS_KEY ?? "",
@@ -15,7 +21,7 @@ export async function presignPut(env: CloudflareEnv, key: string, contentType: s
     region: "auto",
   });
   const url = new URL(
-    `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET_NAME}/${key}`,
+    `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${bucket}/${key}`,
   );
   url.searchParams.set("X-Amz-Expires", "600");
   const signed = await client.sign(

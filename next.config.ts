@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
-const embedHosts = "https://www.youtube-nocookie.com https://open.spotify.com https://w.soundcloud.com";
+const embedHosts = "https://www.youtube-nocookie.com https://open.spotify.com https://w.soundcloud.com https://challenges.cloudflare.com";
 
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
@@ -14,7 +14,7 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       // Next.js injects inline bootstrap scripts.
-      "script-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://media.fucktheclubup.com https://*.googleusercontent.com",
       "media-src 'self' blob: https://media.fucktheclubup.com",
@@ -33,8 +33,13 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
-    // /media sets its own stricter, sandboxed headers in its route handler.
-    return [{ source: "/((?!media/).*)", headers: securityHeaders }];
+    // /media and the /api file routes set their own stricter, sandboxed headers.
+    // Party links carry a secret token in the URL: never send it as a referrer.
+    return [
+      { source: "/((?!media/|api/).*)", headers: securityHeaders },
+      { source: "/drop/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }] },
+      { source: "/nights/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
+    ];
   },
 };
 

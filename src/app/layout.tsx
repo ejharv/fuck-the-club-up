@@ -3,6 +3,7 @@ import { Archivo, Bowlby_One, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 import { signOutAction } from "./actions";
 import { SECTIONS, SITE_URL } from "@/lib/sections";
+import { cf } from "@/lib/env";
 import { currentMember } from "@/lib/session";
 import "./globals.css";
 
@@ -18,6 +19,10 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const member = await currentMember();
+  const openTakedowns =
+    member?.role === "admin"
+      ? ((await (await cf()).DB.prepare("SELECT COUNT(*) AS n FROM takedown_requests WHERE status = 'open'").first<{ n: number }>())?.n ?? 0)
+      : 0;
   return (
     <html lang="en" className={`${archivo.variable} ${bowlby.variable} ${jetbrains.variable}`}>
       <body className="antialiased">
@@ -36,9 +41,22 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                     New post
                   </Link>
                   {member.role === "admin" && (
-                    <Link href="/crew" className="hover:text-maize">
-                      Crew
-                    </Link>
+                    <>
+                      <Link href="/nights" className="hover:text-maize">
+                        Nights
+                      </Link>
+                      <Link href="/crew" className="hidden hover:text-maize sm:inline">
+                        Crew
+                      </Link>
+                      <Link href="/takedowns" className="hover:text-maize">
+                        Takedowns
+                        {openTakedowns > 0 && (
+                          <span className="ml-1 rounded-full bg-pink px-1.5 text-night" aria-label={`${openTakedowns} open`}>
+                            {openTakedowns}
+                          </span>
+                        )}
+                      </Link>
+                    </>
                   )}
                   <form action={signOutAction}>
                     <button className="uppercase tracking-[inherit] text-dim hover:text-ink">Sign out</button>
