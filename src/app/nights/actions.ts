@@ -75,7 +75,11 @@ export async function createNight(_prev: AdminResult, form: FormData): Promise<A
       .bind(id, name, nightOf, await sha256Hex(token), await encryptText(env.AUTH_SECRET, token), limits.capacity, limits.maxPlusOnes, opensAt, closesAt, clean(form.get("details"), 2000),
         clean(form.get("location"), 200), clean(form.get("dressCode"), 100), admin.email, new Date().toISOString())
       .run();
-    const mediaKey = String(form.get("mediaKey") ?? "");
+    // The creator is a host (so they can appear in "Hosted by").
+    await env.DB.prepare("INSERT OR IGNORE INTO night_hosts (night_id, email, added_by, created_at) VALUES (?, ?, 'creator', ?)")
+      .bind(id, admin.email, new Date().toISOString())
+      .run();
+        const mediaKey = String(form.get("mediaKey") ?? "");
     if (mediaKey) {
       const up = await env.DB.prepare("SELECT kind, content_type FROM uploads WHERE r2_key = ? AND email = ? AND used = 0")
         .bind(mediaKey, admin.email)
@@ -421,6 +425,29 @@ export async function setInviteOg(nightId: string, key: string, sig: string): Pr
       env.DB.prepare("UPDATE uploads SET used = 1 WHERE r2_key = ?").bind(key),
     ]);
     if (night.og_key && night.og_key !== key) await env.MEDIA.delete(night.og_key);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** A host's name on the invite ("Hosted by …"). Hosts set their own; admins can set anyone's. */
+export async function setHostName(nightId: string, email: string, nameRaw: string): Promise<AdminResult> {
+  try {
+    const { env, night, access } = await adminNight(nightId);
+    const target = String(email ?? "").toLowerCase();
+    if (access.role !== "admin" && access.email !== target) return { error: "You can only change your own name." };
+    const name = clean(nameRaw, 40);
+    const res = await env.DB.prepare("UPDATE night_hosts SET display_name = ? WHERE night_id = ? AND email = ?").bind(name, night.id, target).run();
+    if (!res.meta.changes) {
+      // An admin who isn't a host row yet (e.g. a night made before hosts existed) adds themselves.
+      if (access.role === "admin" && access.email === target) {
+        await env.DB.prepare("INSERT INTO night_hosts (night_id, email, added_by, created_at, display_name) VALUES (?, ?, ?, ?, ?)")
+          .bind(night.id, target, target, new Date().toISOString(), name)
+          .run();
+      } else return { error: "That person isn't a host of this night." };
+    }
+    revalidatePath(`/nights/${night.id}`);
     return { ok: true };
   } catch (e) {
     return fail(e);

@@ -47,7 +47,7 @@ export default async function NightAdminPage({
       .all<{ device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number }>(),
     latestDraft(id),
     night.post_id ? DB.prepare("SELECT slug FROM posts WHERE id = ?").bind(night.post_id).first<{ slug: string }>() : null,
-    DB.prepare("SELECT email FROM night_hosts WHERE night_id = ? ORDER BY created_at").bind(id).all<{ email: string }>(),
+    DB.prepare("SELECT email, display_name FROM night_hosts WHERE night_id = ? ORDER BY created_at").bind(id).all<{ email: string; display_name: string | null }>(),
   ]);
 
   let review = { approvals: 0, notes: [] as Array<{ nickname: string | null; body: string }> };
@@ -110,7 +110,8 @@ export default async function NightAdminPage({
         rsvps={rsvps.results}
         guestLimits={{ capacity: night.capacity, maxPlusOnes: night.max_plus_ones }}
         isAdmin={access.role === "admin"}
-        hosts={hosts.results.map((h) => h.email)}
+        hosts={hosts.results.map((h) => ({ email: h.email, name: h.display_name ?? "" }))}
+        me={access.email}
         draft={draft}
         draftBody={draft ? <Markdown>{draft.body}</Markdown> : null}
         review={review}

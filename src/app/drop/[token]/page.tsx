@@ -49,6 +49,12 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   const phase = phaseOf(night);
   const DB = env.DB;
 
+  const hostNames = (
+    await DB.prepare("SELECT display_name FROM night_hosts WHERE night_id = ? AND display_name IS NOT NULL AND display_name != '' ORDER BY created_at")
+      .bind(night.id)
+      .all<{ display_name: string }>()
+  ).results.map((h) => h.display_name);
+  const hostedBy = hostNames.length > 1 ? `${hostNames.slice(0, -1).join(", ")} & ${hostNames[hostNames.length - 1]}` : hostNames[0] ?? null;
   const [rsvps, mine, album, draft, accountCount, post] = await Promise.all([
     DB.prepare("SELECT device_id, nickname, answer, plus_ones, waitlisted FROM night_rsvps WHERE night_id = ? ORDER BY created_at")
       .bind(night.id)
@@ -128,6 +134,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         {phase === "invite" ? "You're invited" : phase === "live" ? "It's happening" : phase === "after" ? "The morning after" : "It dropped"}
       </p>
       <h1 className="display mt-3 break-words text-[clamp(2.5rem,11vw,6rem)]">{night.name}</h1>
+      {hostedBy && <p className="mono mt-3 text-maize">Hosted by {hostedBy}</p>}
       {night.invite_media_key && phase !== "dropped" && (
         <div className="mt-6 overflow-hidden rounded-md border border-line bg-black">
           {night.invite_media_kind === "video" ? (

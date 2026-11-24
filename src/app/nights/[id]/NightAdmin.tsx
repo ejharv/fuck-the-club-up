@@ -26,6 +26,7 @@ import {
   setGuestLimits,
   addHost,
   removeHost,
+  setHostName,
   removeRsvp,
   setVenues,
   updateUpload,
@@ -279,29 +280,59 @@ function VenuesPanel({ nightId, venues }: { nightId: string; venues: Venue[] }) 
   );
 }
 
-function HostsPanel({ nightId, hosts, isAdmin }: { nightId: string; hosts: string[]; isAdmin: boolean }) {
+function HostRow({ nightId, host, canEdit, canRemove, isMe }: { nightId: string; host: { email: string; name: string }; canEdit: boolean; canRemove: boolean; isMe: boolean }) {
+  const { pending, error, run } = useRun();
+  const [name, setName] = useState(host.name);
+  const [saved, setSaved] = useState(false);
+  return (
+    <li className="space-y-2 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate text-sm text-dim">{host.email}{isMe ? " (you)" : ""}</span>
+        {canRemove && (
+          <button type="button" disabled={pending} onClick={() => confirm(`Remove ${host.email} as a host?`) && run(() => removeHost(nightId, host.email))} className={textBtn}>
+            Remove
+          </button>
+        )}
+      </div>
+      {canEdit ? (
+        <div className="flex gap-2">
+          <label htmlFor={`hn-${host.email}`} className="sr-only">Name on the invite</label>
+          <input
+            id={`hn-${host.email}`}
+            value={name}
+            onChange={(e) => { setName(e.target.value); setSaved(false); }}
+            maxLength={40}
+            placeholder={isMe ? "Your name on the invite" : "Their name on the invite"}
+            className="field flex-1"
+          />
+          <button type="button" disabled={pending || name === host.name} onClick={() => run(() => setHostName(nightId, host.email, name), () => setSaved(true))} className={btnGhost}>
+            {pending ? "Saving…" : "Save"}
+          </button>
+        </div>
+      ) : (
+        <p className="font-bold">{host.name || <span className="font-normal text-dim">No name set yet</span>}</p>
+      )}
+      {saved && <p role="status" className="text-sm text-maize">Saved. It shows on the invite as &quot;Hosted by&quot;.</p>}
+      <ErrorLine error={error} />
+    </li>
+  );
+}
+
+function HostsPanel({ nightId, hosts, isAdmin, me }: { nightId: string; hosts: Array<{ email: string; name: string }>; isAdmin: boolean; me: string }) {
   const { pending, error, run } = useRun();
   const [email, setEmail] = useState("");
+  const list = isAdmin && !hosts.some((h) => h.email === me) ? [{ email: me, name: "" }, ...hosts] : hosts;
   return (
     <section aria-labelledby="hosts-h" className="mt-6 rounded-md border border-line p-4 sm:mt-8 sm:p-5">
       <h2 id="hosts-h" className="display text-xl">Hosts</h2>
       <p className="mt-1 text-sm text-dim">
-        Co-hosts can run this night: guest list, photos, places, draft and drop. They sign in with the Google email you add, no crew account needed.
+        Names here show on the invite as &quot;Hosted by …&quot;. Emails never show. Co-hosts can run this night: guest list, photos, places, draft and drop.
       </p>
-      {hosts.length > 0 && (
-        <ul className="mt-3 divide-y divide-line rounded border border-line">
-          {hosts.map((h) => (
-            <li key={h} className="flex min-h-12 items-center justify-between gap-3 px-3">
-              <span className="min-w-0 truncate">{h}</span>
-              {isAdmin && (
-                <button type="button" disabled={pending} onClick={() => confirm(`Remove ${h} as a host?`) && run(() => removeHost(nightId, h))} className={textBtn}>
-                  Remove
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="mt-3 divide-y divide-line rounded border border-line">
+        {list.map((h) => (
+          <HostRow key={h.email} nightId={nightId} host={h} canEdit={isAdmin || h.email === me} canRemove={isAdmin && h.email !== me} isMe={h.email === me} />
+        ))}
+      </ul>
       {isAdmin && (
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <label htmlFor="host-email" className="sr-only">Co-host&apos;s Google email</label>
@@ -310,7 +341,7 @@ function HostsPanel({ nightId, hosts, isAdmin }: { nightId: string; hosts: strin
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="cohost@gmail.com"
+            placeholder="Add a co-host by Google email"
             autoComplete="off"
             autoCapitalize="none"
             autoCorrect="off"
@@ -321,9 +352,6 @@ function HostsPanel({ nightId, hosts, isAdmin }: { nightId: string; hosts: strin
             Add host
           </button>
         </div>
-      )}
-      {isAdmin && hosts.length > 0 && (
-        <p className="mt-2 text-sm text-dim">Send them this page&apos;s address; they sign in with Google and land here.</p>
       )}
       <ErrorLine error={error} />
     </section>
@@ -674,7 +702,8 @@ export function NightAdmin(props: {
   rsvps: Rsvp[];
   guestLimits: { capacity: number | null; maxPlusOnes: number };
   isAdmin: boolean;
-  hosts: string[];
+  hosts: Array<{ email: string; name: string }>;
+  me: string;
   draft: Draft | null;
   draftBody: ReactNode;
   review: { approvals: number; notes: Array<{ nickname: string | null; body: string }> };
@@ -736,7 +765,7 @@ export function NightAdmin(props: {
         </p>
       )}
       {!dropped && <LinkPanel nightId={night.id} freshLink={props.freshLink} night={night} invite={props.invite} />}
-      <HostsPanel nightId={night.id} hosts={props.hosts} isAdmin={props.isAdmin} />
+      <HostsPanel nightId={night.id} hosts={props.hosts} isAdmin={props.isAdmin} me={props.me} />
       {!dropped && <GuestsPanel nightId={night.id} rsvps={props.rsvps} limits={props.guestLimits} />}
       <AccountsPanel nightId={night.id} accounts={props.accounts} rsvps={props.rsvps} />
       <UploadsPanel nightId={night.id} uploads={props.uploads} />
