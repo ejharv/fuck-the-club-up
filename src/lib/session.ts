@@ -12,6 +12,12 @@ export async function currentMember(): Promise<Member | null> {
   return getMember(session?.user?.email);
 }
 
+/** The signed-in Google email, whether or not it's on the crew list (invite claims only). */
+export async function signedInEmail(): Promise<string | null> {
+  const session = await auth();
+  return session?.user?.email?.toLowerCase() ?? null;
+}
+
 export class NotAllowed extends Error {}
 
 export async function requireMember(): Promise<Member> {

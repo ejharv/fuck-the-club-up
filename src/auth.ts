@@ -1,11 +1,16 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import { cookies } from "next/headers";
 import { cf } from "@/lib/env";
+import { JOIN_COOKIE, inviteFits, liveInvite } from "@/lib/invites";
 
 /**
  * Google sign-in, gated by the `members` table in D1. If your email isn't on
- * the crew list you can't sign in at all. Emails in ADMIN_EMAILS are added as
- * admins on their first sign-in so the site can be bootstrapped.
+ * the crew list you can't sign in, unless you arrived through a working crew
+ * invite link meant for your email (the /join page sets a short-lived cookie).
+ * Signing in through an invite grants nothing by itself: the person still
+ * claims it on the /join page. Emails in ADMIN_EMAILS become admins on their
+ * first sign-in so the site can be bootstrapped.
  *
  * Config is built per request because D1 and secrets only exist inside a
  * request on Workers.
@@ -42,7 +47,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
         }
 
         const member = await env.DB.prepare("SELECT email FROM members WHERE email = ?").bind(email).first();
-        if (!member) return "/login?error=NotOnTheList";
+        if (!member) {
+          const joinToken = (await cookies()).get(JOIN_COOKIE)?.value;
+          const invite = joinToken ? await liveInvite(env.DB, joinToken) : null;
+          if (invite && inviteFits(invite, email)) return true;
+          return invite ? `/join/${joinToken}?error=WrongAccount` : "/login?error=NotOnTheList";
+        }
 
         await env.DB.prepare("UPDATE members SET name = ?2, image = ?3 WHERE email = ?1")
           .bind(email, profile.name ?? null, (profile.picture as string | undefined) ?? null)

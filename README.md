@@ -117,8 +117,15 @@ npm run dev                            # http://localhost:3000
 Workers & Pages → the Worker → Settings → Builds → connect this repo. Use build command `npx opennextjs-cloudflare build` and deploy command `npx opennextjs-cloudflare deploy`.
 
 ## Adding friends
-- **To post directly (crew):** sign in, open **Crew** in the header, add the Google email they use.
-- **For a night:** just send them the night's link. No account needed.
+- **Invite link (recommended):** admin → **Crew** → *Send an invite link*. The link unfurls with a fun preview image in group chats. Opening it does nothing until the person signs in with Google and presses *Claim*.
+  - **Crew invites** can be multi-use (up to 25) and last up to two weeks. Good for a group chat.
+  - **Admin invites** are locked to one Google email, single use, and expire within 48 hours. A forwarded admin link is useless to anyone else.
+  - Open invites are listed on **Crew** with a *Revoke* button. Only a SHA-256 fingerprint of each link is stored.
+- **Directly:** add their Google email on **Crew**.
+- **First admin:** emails in the `ADMIN_EMAILS` secret become admin on their first sign-in.
+- **For a night only:** send the night's party link. No account needed.
+
+Any admin can promote others, so only make admins people you'd trust with the whole site.
 
 ## Scripts
 

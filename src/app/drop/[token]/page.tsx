@@ -2,12 +2,28 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Markdown } from "@/components/Markdown";
 import { dropContext } from "@/lib/drop-context";
+import { nightByToken } from "@/lib/nights";
+import { requestOrigin } from "@/lib/origin";
 import { formatDay } from "@/lib/format";
 import { latestDraft, listAlbum, phaseOf } from "@/lib/nights";
 import { DropClient } from "./DropClient";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "You're invited", robots: { index: false, follow: false }, referrer: "no-referrer" };
+/** The group-chat preview: the party invite image plus the night's name. */
+export async function generateMetadata({ params }: { params: Promise<{ token: string }> }): Promise<Metadata> {
+  const night = await nightByToken((await params).token);
+  const title = night ? `You're invited: ${night.name}` : "You're invited";
+  const description = "RSVP here. The same link takes the photos and everyone's side of the story after.";
+  const image = `${await requestOrigin()}/og/party-invite.png`;
+  return {
+    title: { absolute: title },
+    description,
+    robots: { index: false, follow: false },
+    referrer: "no-referrer",
+    openGraph: { title, description, images: [{ url: image, width: 1200, height: 630, alt: "You're invited" }], type: "website" },
+    twitter: { card: "summary_large_image", title, description, images: [image] },
+  };
+}
 
 function Closed() {
   return (
