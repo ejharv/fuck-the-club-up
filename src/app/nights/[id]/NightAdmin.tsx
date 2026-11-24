@@ -28,6 +28,12 @@ type Upload = { r2_key: string; kind: string; nickname: string | null; decision:
 const timeFmt = (iso: string) =>
   new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Detroit" });
 
+// Shared button looks. Every tap target is at least 44px tall.
+const btnGhost = "inline-flex min-h-11 items-center justify-center rounded-full border border-ink px-4 text-sm font-bold hover:border-maize hover:text-maize disabled:opacity-50";
+const btnMaize = "inline-flex min-h-11 items-center justify-center rounded-full bg-maize px-5 font-bold text-night hover:bg-ink disabled:opacity-50";
+const btnMaizeOutline = "inline-flex min-h-11 items-center justify-center rounded-full border border-maize px-5 font-bold text-maize disabled:opacity-50";
+const textBtn = "inline-flex min-h-11 items-center px-2 text-sm text-dim underline underline-offset-4 hover:text-pink";
+
 function useRun() {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -45,12 +51,55 @@ function useRun() {
   return { pending, error, run };
 }
 
-function Panel({ title, children, tone = "line" }: { title: string; children: ReactNode; tone?: "line" | "maize" }) {
+/** One step of the night. A <details> so it can fold away; its contents stay mounted, so unsaved edits survive. */
+function Panel({ id, step, title, meta, children, tone = "line" }: { id: string; step: number; title: string; meta?: ReactNode; children: ReactNode; tone?: "line" | "maize" }) {
   return (
-    <section className={`mt-10 rounded-md border ${tone === "maize" ? "border-2 border-dashed border-maize" : "border-line"} p-5 sm:p-6`}>
-      <h2 className="display text-2xl">{title}</h2>
-      {children}
-    </section>
+    <details
+      id={id}
+      open
+      className={`group mt-6 scroll-mt-20 rounded-md ${tone === "maize" ? "border-2 border-dashed border-maize" : "border border-line"} sm:mt-8`}
+    >
+      <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 p-4 sm:px-6 [&::-webkit-details-marker]:hidden">
+        <span aria-hidden className="mono grid h-7 w-7 shrink-0 place-items-center rounded-full border border-maize text-maize">{step}</span>
+        <div className="min-w-0 flex-1">
+          <h2 className="display block text-xl sm:text-2xl">{title}</h2>
+          {meta && <span className="mono mt-1 block text-dim">{meta}</span>}
+        </div>
+        <span aria-hidden className="mono shrink-0 text-dim transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <div className="px-4 pb-5 sm:px-6 sm:pb-6">{children}</div>
+    </details>
+  );
+}
+
+function ErrorLine({ error }: { error: string | null }) {
+  return error ? <p role="alert" className="mt-3 rounded-md border border-pink/60 bg-pink/10 p-3 text-sm">{error}</p> : null;
+}
+
+type Step = { id: string; n: number; label: string; value?: string; done?: boolean };
+
+/** Sticky strip: where the night stands, and a thumb-reachable jump to each step. */
+function StatusBar({ steps, next }: { steps: Step[]; next: string | null }) {
+  return (
+    <nav aria-label="Steps for this night" className="sticky top-0 z-30 -mx-4 mt-6 border-y border-line bg-night/95 backdrop-blur sm:-mx-6">
+      <ol className="flex gap-2 overflow-x-auto px-4 py-2 sm:px-6 [scrollbar-width:none]">
+        {steps.map((s) => (
+          <li key={s.id} className="shrink-0">
+            <a
+              href={`#${s.id}`}
+              aria-current={s.id === next ? "step" : undefined}
+              className={`inline-flex min-h-11 items-center gap-2 rounded-full border px-3 text-sm font-bold ${
+                s.id === next ? "border-maize bg-maize text-night" : s.done ? "border-line text-ink" : "border-line text-dim"
+              }`}
+            >
+              <span className="mono" aria-hidden>{s.done && s.id !== next ? "✓" : s.n}</span>
+              {s.label}
+              {s.value && <span className={`mono ${s.id === next ? "text-night" : "text-maize"}`}>{s.value}</span>}
+            </a>
+          </li>
+        ))}
+      </ol>
+    </nav>
   );
 }
 
@@ -67,51 +116,53 @@ function LinkPanel({ nightId, freshLink, night }: { nightId: string; freshLink: 
     window.history.replaceState(null, "", `/nights/${nightId}`);
   }, [url, nightId]);
 
+  const uploadsState = night.status === "collecting" ? (night.phase === "invite" ? "Invite out" : "Open") : night.status === "closed" ? "Closed" : "Done";
+
   return (
-    <Panel title="The link" tone="maize">
+    <Panel id="link" step={1} title="The link" tone="maize" meta={`Uploads ${uploadsState.toLowerCase()} · album ${night.albumOpen ? "shared" : "hidden"}`}>
       {url ? (
-        <div className="mt-4 grid gap-5 sm:grid-cols-[1fr_auto]">
-          <div>
+        <div className="grid gap-5 sm:grid-cols-[1fr_auto]">
+          <div className="min-w-0">
             <p className="text-dim">Copy it now. Only a fingerprint of it is stored, so this is the one time it&apos;s shown.</p>
             <p className="mt-3 break-all rounded bg-night-2 p-3 font-mono text-sm">{url}</p>
             <button
               type="button"
               onClick={async () => { await navigator.clipboard.writeText(url); setCopied(true); }}
-              className="mt-3 rounded-full bg-maize px-5 py-2 font-bold text-night hover:bg-ink"
+              className={`${btnMaize} mt-3 w-full sm:w-auto`}
             >
               {copied ? "Copied" : "Copy link"}
             </button>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {qr && <img src={qr} alt="QR code for the link" className="h-40 w-40 rounded" />}
+          {qr && <img src={qr} alt="QR code for the link" className="h-48 w-48 justify-self-center rounded sm:h-40 sm:w-40" />}
         </div>
       ) : (
-        <p className="mt-3 text-dim">The link was shown when you created the night. Lost it? Make a new one; the old one stops working.</p>
+        <p className="text-dim">The link was shown when you created the night. Lost it? Make a new one; the old one stops working.</p>
       )}
-      <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-3">
+      <dl className="mt-5 grid grid-cols-2 gap-3 rounded bg-night-2 p-3 text-sm sm:grid-cols-3">
         <div><dt className="mono text-maize">Party starts</dt><dd>{timeFmt(night.opensAt)}</dd></div>
         <div><dt className="mono text-maize">Photos close</dt><dd>{timeFmt(night.closesAt)}</dd></div>
-        <div><dt className="mono text-maize">Shared album</dt><dd>{night.albumOpen ? "Visible to link holders" : "Hidden"}</dd></div>
+        <div className="col-span-2 sm:col-span-1"><dt className="mono text-maize">Shared album</dt><dd>{night.albumOpen ? "Visible to link holders" : "Hidden"}</dd></div>
       </dl>
-      <div className="mt-5 flex flex-wrap gap-3">
-        <button type="button" disabled={pending} onClick={() => run(() => regenerateLink(nightId), (r) => r && "token" in r && r.token && setToken(r.token))} className="rounded-full border border-ink px-4 py-2 text-sm font-bold hover:border-maize hover:text-maize">
-          Regenerate link
-        </button>
+      <div className="mt-5 grid gap-2 sm:flex sm:flex-wrap sm:gap-3">
         {night.status === "collecting" && (
-          <button type="button" disabled={pending} onClick={() => run(() => setUploadWindow(nightId, false))} className="rounded-full border border-ink px-4 py-2 text-sm font-bold hover:border-maize hover:text-maize">
+          <button type="button" disabled={pending} onClick={() => run(() => setUploadWindow(nightId, false))} className={btnGhost}>
             Close uploads now
           </button>
         )}
         {night.status === "closed" && (
-          <button type="button" disabled={pending} onClick={() => run(() => setUploadWindow(nightId, true))} className="rounded-full border border-ink px-4 py-2 text-sm font-bold hover:border-maize hover:text-maize">
+          <button type="button" disabled={pending} onClick={() => run(() => setUploadWindow(nightId, true))} className={btnGhost}>
             Reopen uploads for 24 hours
           </button>
         )}
-        <button type="button" disabled={pending} onClick={() => run(() => setAlbumOpen(nightId, !night.albumOpen))} className="rounded-full border border-ink px-4 py-2 text-sm font-bold hover:border-maize hover:text-maize">
+        <button type="button" disabled={pending} onClick={() => run(() => setAlbumOpen(nightId, !night.albumOpen))} className={btnGhost}>
           {night.albumOpen ? "Hide shared album" : "Show shared album"}
         </button>
+        <button type="button" disabled={pending} onClick={() => run(() => regenerateLink(nightId), (r) => r && "token" in r && r.token && setToken(r.token))} className={btnGhost}>
+          Regenerate link
+        </button>
       </div>
-      {error && <p role="alert" className="mt-3 text-pink">{error}</p>}
+      <ErrorLine error={error} />
     </Panel>
   );
 }
@@ -119,49 +170,67 @@ function LinkPanel({ nightId, freshLink, night }: { nightId: string; freshLink: 
 function UploadsPanel({ nightId, uploads }: { nightId: string; uploads: Upload[] }) {
   const { pending, error, run } = useRun();
   const kept = uploads.filter((u) => u.decision === "keep").length;
+  const tossed = uploads.filter((u) => u.decision === "toss").length;
+  const undecided = uploads.length - kept - tossed;
   return (
-    <Panel title={`Photos and videos (${uploads.length})`}>
-      <p className="mt-2 text-dim">Keep what goes in the post. Tossed files stay in the shared album; Delete removes a file everywhere. {kept} kept.</p>
+    <Panel id="photos" step={3} title="Photos and videos" meta={uploads.length ? `${kept} kept · ${tossed} tossed · ${undecided} to decide` : "None yet"}>
+      <p className="text-dim">Keep what goes in the post. Tossed files stay in the shared album; Delete removes a file everywhere.</p>
       {uploads.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-3">
-          <button type="button" disabled={pending} onClick={() => run(() => bulkDecision(nightId, uploads.map((u) => u.r2_key), "keep"))} className="rounded-full border border-ink px-4 py-2 text-sm font-bold hover:border-maize hover:text-maize">Keep all</button>
-          <button type="button" disabled={pending} onClick={() => run(() => bulkDecision(nightId, uploads.map((u) => u.r2_key), "toss"))} className="rounded-full border border-ink px-4 py-2 text-sm font-bold hover:border-maize hover:text-maize">Toss all</button>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:gap-3">
+          <button type="button" disabled={pending} onClick={() => run(() => bulkDecision(nightId, uploads.map((u) => u.r2_key), "keep"))} className={btnGhost}>Keep all</button>
+          <button type="button" disabled={pending} onClick={() => run(() => bulkDecision(nightId, uploads.map((u) => u.r2_key), "toss"))} className={btnGhost}>Toss all</button>
         </div>
       )}
-      <ul className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {uploads.map((u) => (
-          <li key={u.r2_key} className={`overflow-hidden rounded border ${u.decision === "keep" ? "border-maize" : u.decision === "toss" ? "border-line opacity-50" : "border-line"} bg-night-2`}>
-            {u.kind === "photo" ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={u.src} alt="" loading="lazy" className="aspect-square w-full object-cover" />
-            ) : u.kind === "video" ? (
-              <video src={u.src} controls playsInline preload="none" className="aspect-square w-full bg-black object-cover" />
-            ) : (
-              <div className="grid aspect-square place-items-center p-2"><audio src={u.src} controls preload="none" className="w-full" /></div>
-            )}
-            <div className="space-y-2 p-2 text-sm">
-              <p className="truncate text-dim">{u.nickname ?? "Anonymous"} · {u.size >= 1048576 ? `${(u.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(u.size / 1024))} KB`}{u.is_cover ? " · Cover" : ""}</p>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" disabled={pending} aria-pressed={u.decision === "keep"} onClick={() => run(() => updateUpload(nightId, u.r2_key, { decision: u.decision === "keep" ? "pending" : "keep" }))} className={`rounded px-2 py-1 font-bold ${u.decision === "keep" ? "bg-maize text-night" : "border border-line"}`}>Keep</button>
-                <button type="button" disabled={pending} aria-pressed={u.decision === "toss"} onClick={() => run(() => updateUpload(nightId, u.r2_key, { decision: u.decision === "toss" ? "pending" : "toss" }))} className={`rounded px-2 py-1 font-bold ${u.decision === "toss" ? "bg-ink text-night" : "border border-line"}`}>Toss</button>
-                {u.kind === "photo" && !u.is_cover && (
-                  <button type="button" disabled={pending} onClick={() => run(() => updateUpload(nightId, u.r2_key, { cover: true }))} className="rounded border border-line px-2 py-1">Cover</button>
+      {uploads.length === 0 && <p className="mt-3 text-dim">Nothing uploaded yet. Files show up here as people drop them on the link.</p>}
+      <ul className={`mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 ${pending ? "opacity-80" : ""}`}>
+        {uploads.map((u) => {
+          const keep = u.decision === "keep";
+          const toss = u.decision === "toss";
+          return (
+            <li key={u.r2_key} className={`relative overflow-hidden rounded bg-night-2 ${keep ? "border-2 border-maize" : "border border-line"}`}>
+              <div className={toss ? "opacity-40 grayscale" : ""}>
+                {u.kind === "photo" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={u.src} alt="" loading="lazy" className="aspect-square w-full object-cover" />
+                ) : u.kind === "video" ? (
+                  <video src={u.src} controls playsInline preload="none" className="aspect-square w-full bg-black object-cover" />
+                ) : (
+                  <div className="grid aspect-square place-items-center p-2"><audio src={u.src} controls preload="none" className="w-full" /></div>
                 )}
-                <button type="button" disabled={pending} onClick={() => confirm("Delete this file from the album for good?") && run(() => deleteUpload(nightId, u.r2_key))} className="rounded px-2 py-1 text-pink underline">Delete</button>
               </div>
-              <input
-                defaultValue={u.caption ?? ""}
-                maxLength={300}
-                aria-label="Caption"
-                placeholder="Caption"
-                onBlur={(e) => e.target.value !== (u.caption ?? "") && run(() => updateUpload(nightId, u.r2_key, { caption: e.target.value }))}
-                className="field py-1.5 text-sm"
-              />
-            </div>
-          </li>
-        ))}
+              <div className="pointer-events-none absolute left-1.5 top-1.5 flex flex-wrap gap-1">
+                {keep && <span className="mono rounded bg-maize px-1.5 py-0.5 text-night">Kept</span>}
+                {toss && <span className="mono rounded bg-night px-1.5 py-0.5 text-dim">Tossed</span>}
+                {u.is_cover ? <span className="mono rounded bg-pink px-1.5 py-0.5 text-night">Cover</span> : null}
+              </div>
+              <div className="space-y-2 p-2 text-sm">
+                <p className="truncate text-dim">{u.nickname ?? "Anonymous"} · {u.size >= 1048576 ? `${(u.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(u.size / 1024))} KB`}</p>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button type="button" disabled={pending} aria-pressed={keep} onClick={() => run(() => updateUpload(nightId, u.r2_key, { decision: keep ? "pending" : "keep" }))} className={`min-h-11 rounded font-bold ${keep ? "bg-maize text-night" : "border border-line hover:border-maize"}`}>Keep</button>
+                  <button type="button" disabled={pending} aria-pressed={toss} onClick={() => run(() => updateUpload(nightId, u.r2_key, { decision: toss ? "pending" : "toss" }))} className={`min-h-11 rounded font-bold ${toss ? "bg-ink text-night" : "border border-line hover:border-ink"}`}>Toss</button>
+                  {u.kind === "photo" && !u.is_cover ? (
+                    <button type="button" disabled={pending} onClick={() => run(() => updateUpload(nightId, u.r2_key, { cover: true }))} className="min-h-11 rounded border border-line text-dim hover:border-pink hover:text-ink">Cover</button>
+                  ) : (
+                    <span aria-hidden className="grid min-h-11 place-items-center text-xs text-dim">{u.is_cover ? "Is cover" : ""}</span>
+                  )}
+                  <button type="button" disabled={pending} onClick={() => confirm("Delete this file from the album for good?") && run(() => deleteUpload(nightId, u.r2_key))} className="min-h-11 rounded text-pink underline underline-offset-4">Delete</button>
+                </div>
+                <input
+                  defaultValue={u.caption ?? ""}
+                  maxLength={300}
+                  aria-label="Caption"
+                  placeholder="Caption"
+                  enterKeyHint="done"
+                  onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+                  onBlur={(e) => e.target.value !== (u.caption ?? "") && run(() => updateUpload(nightId, u.r2_key, { caption: e.target.value }))}
+                  className="field py-2 text-base"
+                />
+              </div>
+            </li>
+          );
+        })}
       </ul>
-      {error && <p role="alert" className="mt-3 text-pink">{error}</p>}
+      <ErrorLine error={error} />
     </Panel>
   );
 }
@@ -171,24 +240,37 @@ function VenuesPanel({ nightId, venues }: { nightId: string; venues: Array<{ nam
   const { pending, error, run } = useRun();
   const [saved, setSaved] = useState(false);
   const set = (i: number, k: "name" | "url", v: string) => { setSaved(false); setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x))); };
+  const named = venues.filter((v) => v.name).length;
   return (
-    <Panel title="Places you went">
-      <p className="mt-2 text-dim">Name and website. When Claude mentions one, it links to that website. Those are the only links a draft can have.</p>
+    <Panel id="places" step={4} title="Places you went" meta={named ? `${named} saved` : "None saved"}>
+      <p className="text-dim">Name and website. When Claude mentions one, it links to that website. Those are the only links a draft can have.</p>
       <ul className="mt-4 space-y-3">
         {rows.map((v, i) => (
-          <li key={i} className="grid gap-2 sm:grid-cols-[14rem_1fr_auto]">
-            <input value={v.name} onChange={(e) => set(i, "name", e.target.value)} maxLength={60} aria-label="Place name" placeholder="Rick's" className="field" />
-            <input value={v.url} onChange={(e) => set(i, "url", e.target.value)} maxLength={300} aria-label="Website" placeholder="ricksamericancafe.com" className="field" />
-            <button type="button" onClick={() => setRows((r) => r.filter((_, j) => j !== i))} className="text-sm text-dim underline hover:text-pink">Remove</button>
+          <li key={i} className="grid gap-2 rounded bg-night-2 p-3 sm:grid-cols-[14rem_1fr_auto] sm:items-center sm:bg-transparent sm:p-0">
+            <input value={v.name} onChange={(e) => set(i, "name", e.target.value)} maxLength={60} aria-label="Place name" placeholder="Rick's" autoComplete="off" enterKeyHint="next" className="field" />
+            <input
+              value={v.url}
+              onChange={(e) => set(i, "url", e.target.value)}
+              maxLength={300}
+              aria-label="Website"
+              placeholder="ricksamericancafe.com"
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className="field"
+            />
+            <button type="button" onClick={() => setRows((r) => r.filter((_, j) => j !== i))} className={`${textBtn} justify-self-end`}>Remove</button>
           </li>
         ))}
       </ul>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setRows((r) => [...r, { name: "", url: "" }])} className="rounded-full border border-ink px-4 py-2 font-bold hover:border-maize hover:text-maize">Add a place</button>
-        <button type="button" disabled={pending} onClick={() => run(() => setVenues(nightId, rows), () => setSaved(true))} className="rounded-full bg-maize px-4 py-2 font-bold text-night hover:bg-ink">Save places</button>
-        {saved && <span className="text-maize">Saved.</span>}
+      <div className="mt-4 grid grid-cols-2 items-center gap-2 sm:flex sm:gap-3">
+        <button type="button" onClick={() => setRows((r) => [...r, { name: "", url: "" }])} className={btnGhost}>Add a place</button>
+        <button type="button" disabled={pending} onClick={() => run(() => setVenues(nightId, rows), () => setSaved(true))} className={btnMaize}>{pending ? "Saving…" : "Save places"}</button>
+        {saved && <span role="status" className="col-span-2 text-maize">Saved.</span>}
       </div>
-      {error && <p role="alert" className="mt-3 text-pink">{error}</p>}
+      <ErrorLine error={error} />
     </Panel>
   );
 }
@@ -197,15 +279,15 @@ function AccountsPanel({ nightId, accounts, rsvps }: { nightId: string; accounts
   const { pending, error, run } = useRun();
   const going = rsvps.filter((r) => r.answer === "going").map((r) => r.nickname);
   return (
-    <Panel title={`Accounts (${accounts.length})`}>
-      {rsvps.length > 0 && <p className="mt-2 text-dim">RSVP&apos;d going: {going.join(", ") || "nobody yet"}.</p>}
+    <Panel id="accounts" step={2} title="Accounts" meta={`${accounts.length} written · ${going.length} going`}>
+      {rsvps.length > 0 && <p className="text-dim">RSVP&apos;d going: {going.join(", ") || "nobody yet"}.</p>}
       {accounts.length ? (
-        <ul className="mt-4 space-y-4">
+        <ul className="mt-4 space-y-3">
           {accounts.map((a) => (
             <li key={a.device_id} className="rounded bg-night-2 p-4">
-              <div className="flex items-center justify-between gap-3">
+              <div className="-my-2 flex items-center justify-between gap-3">
                 <span className="mono text-maize">{a.nickname}</span>
-                <button type="button" disabled={pending} onClick={() => confirm(`Remove ${a.nickname}'s account?`) && run(() => removeAccount(nightId, a.device_id))} className="text-sm text-dim underline hover:text-pink">Remove</button>
+                <button type="button" disabled={pending} onClick={() => confirm(`Remove ${a.nickname}'s account?`) && run(() => removeAccount(nightId, a.device_id))} className={`${textBtn} -mr-2`}>Remove</button>
               </div>
               <p className="mt-2 whitespace-pre-line">{a.body}</p>
             </li>
@@ -214,7 +296,7 @@ function AccountsPanel({ nightId, accounts, rsvps }: { nightId: string; accounts
       ) : (
         <p className="mt-2 text-dim">Nobody has written their side yet. Accounts open on the link when the party starts.</p>
       )}
-      {error && <p role="alert" className="mt-3 text-pink">{error}</p>}
+      <ErrorLine error={error} />
     </Panel>
   );
 }
@@ -269,40 +351,68 @@ function DraftPanel({
     );
   }
 
+  const allApproved = accountCount > 0 && review.approvals >= accountCount;
+
   return (
-    <Panel title={draft ? `Draft, version ${draft.version}` : "The draft"} tone="maize">
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" disabled={busy || !accountCount} onClick={() => generate(false)} className="rounded-full bg-maize px-5 py-3 font-bold text-night hover:bg-ink disabled:opacity-50">
+    <Panel
+      id="draft"
+      step={5}
+      title={draft ? `Draft, version ${draft.version}` : "The draft"}
+      tone="maize"
+      meta={draft ? `${review.approvals} of ${accountCount} approved · ${review.notes.length} ${review.notes.length === 1 ? "note" : "notes"}` : "Not written yet"}
+    >
+      <div className="grid gap-2 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
+        <button type="button" disabled={busy || !accountCount} onClick={() => generate(false)} className={btnMaize}>
           {busy ? "Claude is writing… keep this tab open" : draft ? "Write a fresh draft" : "Write the draft with Claude"}
         </button>
         {draft && (
-          <button type="button" disabled={busy || !review.notes.length} onClick={() => generate(true)} className="rounded-full border border-maize px-5 py-3 font-bold text-maize disabled:opacity-50">
+          <button type="button" disabled={busy || !review.notes.length} onClick={() => generate(true)} className={btnMaizeOutline}>
             Rewrite with the {review.notes.length} {review.notes.length === 1 ? "note" : "notes"}
           </button>
         )}
-        <button type="button" onClick={() => setEditing((e) => !e)} className="rounded-full border border-ink px-5 py-3 font-bold hover:border-maize hover:text-maize">
+        <button type="button" onClick={() => setEditing((e) => !e)} className={btnGhost}>
           {editing ? "Cancel edit" : draft ? "Edit the text" : "Write it by hand"}
         </button>
-        <span className="text-sm text-dim">{generations} of {maxGenerations} Claude drafts used</span>
       </div>
+      <p className="mono mt-3 text-dim">{generations} of {maxGenerations} Claude drafts used</p>
       {!accountCount && <p className="mt-3 text-dim">Claude needs at least one account to work from.</p>}
-      {genError && <p role="alert" className="mt-3 text-pink">{genError}</p>}
+      <ErrorLine error={genError} />
 
       {editing ? (
         <form action={saveEdit} className="mt-6 space-y-4">
-          <input name="title" required maxLength={140} defaultValue={draft?.title ?? ""} aria-label="Title" placeholder="Title" className="field text-xl" />
-          <input name="dek" maxLength={200} defaultValue={draft?.dek ?? ""} aria-label="Dek" placeholder="Dek" className="field" />
-          <div className="grid gap-3 sm:grid-cols-3">
-            <input name="nightLabel" maxLength={80} defaultValue={draft?.night_label ?? ""} aria-label="The night" placeholder="The night" className="field" />
-            <input name="damage" maxLength={80} defaultValue={draft?.damage ?? ""} aria-label="Damage" placeholder="Damage" className="field" />
-            <input name="rideHome" maxLength={160} defaultValue={draft?.ride_home ?? ""} aria-label="Ride home" placeholder="Ride home" className="field" />
+          <div>
+            <label htmlFor="draft-title" className="mb-1 block text-sm font-bold">Title</label>
+            <input id="draft-title" name="title" required maxLength={140} defaultValue={draft?.title ?? ""} placeholder="Title" className="field text-xl" />
           </div>
-          <textarea name="body" required rows={16} maxLength={60000} defaultValue={draft?.body ?? ""} aria-label="Body" className="field leading-relaxed" />
-          <p className="text-sm text-dim">Link a place with [Rick&apos;s](https://its-website.com). Saving makes a new version, and approvals start over.</p>
-          <button disabled={pending} className="rounded-full bg-maize px-6 py-3 font-bold text-night hover:bg-ink">Save as new version</button>
+          <div>
+            <label htmlFor="draft-dek" className="mb-1 block text-sm font-bold">Dek</label>
+            <input id="draft-dek" name="dek" maxLength={200} defaultValue={draft?.dek ?? ""} placeholder="One line under the title" className="field" />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label htmlFor="draft-night" className="mb-1 block text-sm font-bold">The night</label>
+              <input id="draft-night" name="nightLabel" maxLength={80} defaultValue={draft?.night_label ?? ""} className="field" />
+            </div>
+            <div>
+              <label htmlFor="draft-damage" className="mb-1 block text-sm font-bold">Damage</label>
+              <input id="draft-damage" name="damage" maxLength={80} defaultValue={draft?.damage ?? ""} className="field" />
+            </div>
+            <div>
+              <label htmlFor="draft-ride" className="mb-1 block text-sm font-bold">Ride home</label>
+              <input id="draft-ride" name="rideHome" maxLength={160} defaultValue={draft?.ride_home ?? ""} className="field" />
+            </div>
+          </div>
+          <div>
+            <label htmlFor="draft-body" className="mb-1 block text-sm font-bold">Body</label>
+            <textarea id="draft-body" name="body" required rows={16} maxLength={60000} defaultValue={draft?.body ?? ""} className="field leading-relaxed" />
+            <p className="mt-1 text-sm text-dim">Link a place with [Rick&apos;s](https://its-website.com). Saving makes a new version, and approvals start over.</p>
+          </div>
+          <div className="sticky bottom-0 -mx-4 border-t border-line bg-night/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+            <button disabled={pending} className={`${btnMaize} w-full sm:w-auto`}>{pending ? "Saving…" : "Save as new version"}</button>
+          </div>
         </form>
       ) : draft ? (
-        <div className="mt-6 rounded-md bg-night-2 p-5 sm:p-8">
+        <div className="mt-6 rounded-md bg-night-2 p-4 sm:p-8">
           <h3 className="display text-[clamp(1.8rem,5vw,3rem)]">{draft.title}</h3>
           {draft.dek && <p className="mt-3 text-xl">{draft.dek}</p>}
           <p className="mono mt-4 text-maize">{[draft.night_label, draft.damage, draft.ride_home].filter(Boolean).join(" · ")}</p>
@@ -312,9 +422,11 @@ function DraftPanel({
 
       {draft && (
         <div className="mt-6">
-          <p className="font-bold">{review.approvals} of {accountCount} people who wrote accounts have approved this version.</p>
-          <p className="text-sm text-dim">The approval round is how house rule 1 gets checked: people read it for real names and things they didn&apos;t agree to.</p>
-          <h3 className="mt-5 font-bold">Notes</h3>
+          <p className={`rounded-md border p-3 font-bold ${allApproved ? "border-maize text-maize" : "border-line"}`}>
+            {review.approvals} of {accountCount} people who wrote accounts have approved this version.
+          </p>
+          <p className="mt-2 text-sm text-dim">The approval round is how house rule 1 gets checked: people read it for real names and things they didn&apos;t agree to.</p>
+          <h3 className="mono mt-6 text-maize">Notes on this version</h3>
           {review.notes.length ? (
             <ul className="mt-2 space-y-2">
               {review.notes.map((n, i) => (
@@ -324,13 +436,22 @@ function DraftPanel({
           ) : (
             <p className="mt-2 text-dim">No notes on this version yet.</p>
           )}
-          <div className="mt-3 flex gap-3">
-            <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={600} aria-label="Admin note" placeholder="Your note for the rewrite" className="field" />
-            <button type="button" disabled={pending || !note} onClick={() => run(() => addAdminNote(nightId, note), () => setNote(""))} className="shrink-0 rounded-full border border-ink px-4 font-bold hover:border-maize hover:text-maize">Add</button>
+          <div className="mt-3 flex gap-2">
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={600}
+              aria-label="Admin note"
+              placeholder="Your note for the rewrite"
+              enterKeyHint="send"
+              onKeyDown={(e) => { if (e.key === "Enter" && note && !pending) { e.preventDefault(); run(() => addAdminNote(nightId, note), () => setNote("")); } }}
+              className="field min-w-0"
+            />
+            <button type="button" disabled={pending || !note} onClick={() => run(() => addAdminNote(nightId, note), () => setNote(""))} className={`${btnGhost} shrink-0`}>Add</button>
           </div>
         </div>
       )}
-      {error && <p role="alert" className="mt-3 text-pink">{error}</p>}
+      <ErrorLine error={error} />
     </Panel>
   );
 }
@@ -352,11 +473,17 @@ function PublishPanel({ nightId, draft, status, dropAt, kept, approvals, account
   const allApproved = accountCount > 0 && approvals >= accountCount;
 
   return (
-    <Panel title="Drop it" tone="maize">
+    <Panel
+      id="drop"
+      step={6}
+      title="Drop it"
+      tone="maize"
+      meta={status === "reviewing" && dropAt ? `Scheduled ${timeFmt(dropAt)}` : `Version ${draft.version} · ${kept} ${kept === 1 ? "file" : "files"} · ${allApproved ? "all approved" : `${approvals} of ${accountCount} approved`}`}
+    >
       {status === "reviewing" && dropAt ? (
-        <div className="mt-4">
+        <div>
           <p className="text-lg">Scheduled to drop {timeFmt(dropAt)}.</p>
-          <button type="button" disabled={pending} onClick={() => run(() => cancelSchedule(nightId))} className="mt-3 rounded-full border border-ink px-4 py-2 font-bold hover:border-maize hover:text-maize">Cancel the schedule</button>
+          <button type="button" disabled={pending} onClick={() => run(() => cancelSchedule(nightId))} className={`${btnGhost} mt-3`}>Cancel the schedule</button>
         </div>
       ) : (
         <form
@@ -365,31 +492,35 @@ function PublishPanel({ nightId, draft, status, dropAt, kept, approvals, account
             if (intent === "now" && !allApproved && !confirm(`Only ${approvals} of ${accountCount} approved version ${draft.version}. Drop anyway?`)) return;
             run(() => (intent === "now" ? dropNow(nightId, fields(form)) : scheduleDrop(nightId, fields(form), when)));
           }}
-          className="mt-4 space-y-4"
+          className="space-y-4"
         >
           <p className="text-dim">Publishes version {draft.version} with the {kept} kept {kept === 1 ? "file" : "files"}. Nothing goes public until you do this.</p>
+          {!allApproved && (
+            <p className="rounded-md border border-pink/60 bg-pink/10 p-3 text-sm">Only {approvals} of {accountCount} people have approved this version.</p>
+          )}
           <div>
             <label htmlFor="drop-section" className="mb-2 block font-bold">Section</label>
             <select id="drop-section" name="section" value={section} onChange={(e) => setSection(e.target.value)} className="field sm:w-72">
               {SECTIONS.map((s) => <option key={s.slug} value={s.slug}>{s.name}</option>)}
             </select>
           </div>
-          <label className="flex gap-3 rounded-md border border-line bg-night-2 p-4">
-            <input type="checkbox" name="consent" value="yes" required className="mt-1 h-5 w-5 shrink-0 accent-[var(--maize)]" />
+          <label className="flex cursor-pointer gap-3 rounded-md border border-line bg-night-2 p-4">
+            <input type="checkbox" name="consent" value="yes" required className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />
             <span><strong>{HOUSE_RULES[0].title}</strong> Everyone named or shown in the post and the kept files said yes.</span>
           </label>
-          <div className="flex flex-wrap items-end gap-3">
-            <button name="intent" value="now" disabled={pending} className="rounded-full bg-maize px-6 py-3 font-bold text-night hover:bg-ink disabled:opacity-60">
-              {pending ? "Dropping…" : "Drop now"}
-            </button>
-            <span className="text-dim">or</span>
-            <label className="sr-only" htmlFor="drop-at">Drop at</label>
-            <input id="drop-at" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="field w-auto" />
-            <button name="intent" value="later" disabled={pending || !when} className="rounded-full border border-maize px-6 py-3 font-bold text-maize disabled:opacity-50">Schedule drop</button>
+          <button name="intent" value="now" disabled={pending} className={`${btnMaize} min-h-14 w-full text-lg sm:w-auto sm:px-8`}>
+            {pending ? "Dropping…" : "Drop now"}
+          </button>
+          <div className="rounded-md border border-line p-3">
+            <label className="mono mb-2 block text-dim" htmlFor="drop-at">Or schedule it</label>
+            <div className="grid gap-2 sm:flex sm:items-center sm:gap-3">
+              <input id="drop-at" type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="field min-h-11 sm:w-auto" />
+              <button name="intent" value="later" disabled={pending || !when} className={btnMaizeOutline}>Schedule drop</button>
+            </div>
           </div>
         </form>
       )}
-      {error && <p role="alert" className="mt-3 text-pink">{error}</p>}
+      <ErrorLine error={error} />
     </Panel>
   );
 }
@@ -409,10 +540,52 @@ export function NightAdmin(props: {
   const dropped = night.status === "dropped" || (night.status === "dropping" && night.hasPost);
   const stuck = night.status === "dropping" && !night.hasPost;
   const { pending, run } = useRun();
+
+  const kept = props.uploads.filter((u) => u.decision === "keep").length;
+  const undecided = props.uploads.filter((u) => u.decision !== "keep" && u.decision !== "toss").length;
+  const accountCount = props.accounts.length;
+  const approvals = props.review.approvals;
+  const steps: Step[] = [
+    ...(!dropped ? [{ id: "link", n: 1, label: "Link", done: night.phase !== "invite" && night.phase !== "live" }] : []),
+    { id: "accounts", n: 2, label: "Accounts", value: String(accountCount), done: accountCount > 0 },
+    { id: "photos", n: 3, label: "Photos", value: props.uploads.length ? `${kept}/${props.uploads.length}` : "0", done: props.uploads.length > 0 && undecided === 0 },
+    ...(!dropped
+      ? [
+          { id: "places", n: 4, label: "Places", value: String(props.venues.filter((v) => v.name).length), done: props.venues.some((v) => v.name) },
+          { id: "draft", n: 5, label: "Draft", value: props.draft ? `v${props.draft.version} · ${approvals}/${accountCount} ok` : undefined, done: !!props.draft && accountCount > 0 && approvals >= accountCount },
+        ]
+      : []),
+    ...(!dropped && props.draft ? [{ id: "drop", n: 6, label: night.status === "reviewing" ? "Scheduled" : "Drop" }] : []),
+  ];
+  // The one step that needs attention next.
+  const next = dropped
+    ? null
+    : stuck
+      ? "drop"
+      : night.phase === "invite" || night.phase === "live"
+        ? accountCount === 0 ? "link" : null
+        : undecided > 0
+          ? "photos"
+          : !props.draft
+            ? "draft"
+            : approvals < accountCount
+              ? "draft"
+              : "drop";
+
+  const phaseText = dropped
+    ? "Dropped"
+    : stuck
+      ? "Drop stopped partway"
+      : night.status === "reviewing"
+        ? `Drop scheduled for ${night.dropAt ? timeFmt(night.dropAt) : "later"}`
+        : { invite: "Invite is out", live: "Live: collecting photos and stories", after: "Ready to review", dropped: "Dropped" }[night.phase];
+
   return (
     <>
+      <p className="mono mt-4 text-maize">{phaseText}</p>
+      <StatusBar steps={steps} next={next} />
       {stuck && (
-        <p role="alert" className="mt-8 rounded-md border border-pink bg-pink/10 p-4">
+        <p role="alert" className="mt-6 rounded-md border border-pink bg-pink/10 p-4">
           The last drop stopped partway. Use <strong>Drop now</strong> below to finish it; files already copied won&apos;t be copied twice. The cron will also retry within 15 minutes.
         </p>
       )}
@@ -426,7 +599,7 @@ export function NightAdmin(props: {
           draft={props.draft}
           body={props.draftBody}
           review={props.review}
-          accountCount={props.accounts.length}
+          accountCount={accountCount}
           generations={night.generations}
           maxGenerations={night.maxGenerations}
         />
@@ -437,17 +610,17 @@ export function NightAdmin(props: {
           draft={props.draft}
           status={night.status}
           dropAt={night.dropAt}
-          kept={props.uploads.filter((u) => u.decision === "keep").length}
-          approvals={props.review.approvals}
-          accountCount={props.accounts.length}
+          kept={kept}
+          approvals={approvals}
+          accountCount={accountCount}
         />
       )}
-      <div className="mt-12 border-t border-line pt-6">
+      <div className="mt-12 border-t border-line pt-4">
         <button
           type="button"
           disabled={pending}
           onClick={() => confirm("Delete this night, its album and everyone's accounts? A dropped post stays up.") && run(() => deleteNight(night.id))}
-          className="text-sm text-dim underline underline-offset-4 hover:text-pink"
+          className={`${textBtn} -ml-2`}
         >
           Delete this night and its album
         </button>

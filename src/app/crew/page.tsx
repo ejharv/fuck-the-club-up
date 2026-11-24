@@ -34,11 +34,11 @@ export default async function CrewPage() {
       <InviteForm />
 
       {invites.length > 0 && (
-        <div className="mt-8">
-          <h2 className="font-bold">Open invites</h2>
+        <div className="mt-10">
+          <h2 className="mono text-maize">Open invites ({invites.length})</h2>
           <ul className="mt-3 space-y-2">
             {invites.map((i) => (
-              <li key={i.id} className="flex flex-wrap items-center gap-3 rounded bg-night-2 p-3 text-sm">
+              <li key={i.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded bg-night-2 py-2 pl-3 pr-1 text-sm">
                 <span className={`mono ${i.role === "admin" ? "text-pink" : "text-maize"}`}>{i.role}</span>
                 <span>{i.label ?? i.email ?? "Anyone with the link"}</span>
                 <span className="text-dim">
@@ -46,7 +46,7 @@ export default async function CrewPage() {
                 </span>
                 <form action={revokeInvite} className="ml-auto">
                   <input type="hidden" name="id" value={i.id} />
-                  <button className="text-dim underline underline-offset-4 hover:text-pink">Revoke</button>
+                  <button className="inline-flex min-h-11 items-center px-2 text-dim underline underline-offset-4 hover:text-pink">Revoke</button>
                 </form>
               </li>
             ))}
@@ -54,29 +54,31 @@ export default async function CrewPage() {
         </div>
       )}
 
-      <h2 className="mt-12 font-bold">Or add someone directly</h2>
+      <h2 className="mono mt-12 text-maize">Or add someone directly</h2>
+      <p className="mt-2 text-sm text-dim">No link needed: they just sign in with that Google account.</p>
       <AddMemberForm />
 
-      <ul className="mt-10 border-t border-line">
+      <h2 className="mono mt-12 text-maize">On the list ({members.length})</h2>
+      <ul className="mt-3 border-t border-line">
         {members.map((m) => (
-          <li key={m.email} className="flex items-center gap-4 border-b border-line py-4">
+          <li key={m.email} className="flex items-center gap-3 border-b border-line py-3 sm:gap-4">
             {m.image ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={m.image} alt="" className="h-10 w-10 rounded-full" referrerPolicy="no-referrer" />
+              <img src={m.image} alt="" className="h-10 w-10 shrink-0 rounded-full" referrerPolicy="no-referrer" />
             ) : (
-              <div aria-hidden className="h-10 w-10 rounded-full border border-dashed border-line" />
+              <div aria-hidden className="h-10 w-10 shrink-0 rounded-full border border-dashed border-line" />
             )}
             <div className="min-w-0 flex-1">
               <p className="truncate font-bold text-ink">{m.name ?? "Hasn't signed in yet"}</p>
               <p className="truncate text-sm text-dim">{m.email}</p>
             </div>
-            <span className={`mono ${m.role === "admin" ? "text-pink" : "text-maize"}`}>
+            <span className={`mono shrink-0 ${m.role === "admin" ? "text-pink" : "text-maize"}`}>
               {m.role === "admin" ? "Admin" : "Crew"}
             </span>
             {m.email !== me.email && (
-              <form action={removeMember}>
+              <form action={removeMember} className="shrink-0">
                 <input type="hidden" name="email" value={m.email} />
-                <button className="text-sm text-dim underline underline-offset-4 hover:text-pink">Remove</button>
+                <button className="-mr-2 inline-flex min-h-11 items-center px-2 text-sm text-dim underline underline-offset-4 hover:text-pink">Remove</button>
               </form>
             )}
           </li>

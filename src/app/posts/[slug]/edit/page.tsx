@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getPost } from "@/lib/db";
 import { cf } from "@/lib/env";
@@ -20,8 +21,11 @@ export default async function EditPost({ params }: { params: Promise<{ slug: str
   const env = await cf();
 
   return (
-    <section className="mx-auto max-w-3xl px-4 pt-12 sm:px-6">
-      <h1 className="display text-[clamp(2.5rem,8vw,4.5rem)]">Edit post</h1>
+    <section className="mx-auto max-w-3xl px-4 pt-8 sm:px-6 sm:pt-12">
+      <p className="mono text-pink">
+        <Link href={`/posts/${slug}`} className="-ml-2 inline-flex min-h-11 items-center px-2 hover:text-ink">← Back to the post</Link>
+      </p>
+      <h1 className="display mt-1 text-[clamp(2.5rem,8vw,4.5rem)]">Edit post</h1>
       <EditPostForm
         today={todayInDetroit()}
         post={{
