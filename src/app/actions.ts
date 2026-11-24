@@ -9,6 +9,7 @@ import { ALLOWED_TYPES, MAX_BYTES, MAX_FILES_PER_POST, type FileKind } from "@/l
 import { collectionStatements } from "@/lib/collections";
 import { clean, insertPostStatements, validatePostFields, type MediaInsert, type PostFieldsInput } from "@/lib/post-fields";
 import { songsFromLines } from "@/lib/tracks";
+import { resolveNewMarkers } from "@/lib/inline-media";
 import { cleanVenues } from "@/lib/venues";
 import { safePath } from "@/lib/safe-path";
 import { NotAllowed, requireAdmin, requireMember } from "@/lib/session";
@@ -88,7 +89,11 @@ export async function createPost(input: NewPostInput): Promise<ActionResult> {
 
     const venues = cleanVenues(input.venues);
     if ("error" in venues) return venues;
-    const insert = insertPostStatements(env.DB, fields, media, coverKey, member.email);
+    // Photos placed in the editor ([[new:…]]) point at their media rows once those have ids.
+    const ids = media.map(() => crypto.randomUUID());
+    const keyToId = new Map(media.flatMap((m, i) => (m.key ? [[m.key, ids[i]] as [string, string]] : [])));
+    const body = resolveNewMarkers(fields.body, keyToId, ids);
+    const insert = insertPostStatements(env.DB, { ...fields, body }, media, coverKey, member.email, ids);
     slug = insert.slug;
     const collections = await collectionStatements(env.DB, insert.id, venues, songsFromLines(String(input.songsText ?? "")), insert.mediaRows);
     await env.DB.batch([
@@ -161,6 +166,9 @@ export async function updatePost(input: EditPostInput): Promise<ActionResult> {
       added.media.find((m) => m.kind === "photo")?.key ??
       null;
     const maxPos = await env.DB.prepare("SELECT COALESCE(MAX(position), -1) AS p FROM media WHERE post_id = ?").bind(post.id).first<{ p: number }>();
+    const addedIds = added.media.map(() => crypto.randomUUID());
+    const keyToId = new Map(added.media.flatMap((m, i) => (m.key ? [[m.key, addedIds[i]] as [string, string]] : [])));
+    const body = resolveNewMarkers(fields.body, keyToId, [...keep.map((m) => m.id), ...addedIds]);
 
     const now = new Date().toISOString();
     await env.DB.batch([
@@ -168,7 +176,7 @@ export async function updatePost(input: EditPostInput): Promise<ActionResult> {
         `UPDATE posts SET title = ?, dek = ?, section = ?, night = ?, night_of = ?, damage = ?, ride_home = ?, body = ?,
                           cover_key = ?, updated_at = ? WHERE id = ?`,
       ).bind(fields.title, fields.dek, fields.section, fields.night, fields.nightOf, fields.damage, fields.rideHome,
-        fields.body, coverKey, now, post.id),
+        body, coverKey, now, post.id),
       ...(input.media ?? [])
         .filter((m) => byId.has(m.id) && !remove.includes(m.id))
         .map((m) => env.DB.prepare("UPDATE media SET caption = ? WHERE id = ? AND post_id = ?").bind(clean(m.caption, 300), m.id, post.id)),
@@ -176,7 +184,7 @@ export async function updatePost(input: EditPostInput): Promise<ActionResult> {
       ...added.media.map((m, i) =>
         env.DB.prepare(
           "INSERT INTO media (id, post_id, position, kind, r2_key, url, content_type, caption) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        ).bind(crypto.randomUUID(), post.id, (maxPos?.p ?? -1) + 1 + i, m.kind, m.key, m.url, m.type, m.caption),
+        ).bind(addedIds[i], post.id, (maxPos?.p ?? -1) + 1 + i, m.kind, m.key, m.url, m.type, m.caption),
       ),
       ...added.media
         .filter((m) => m.key)

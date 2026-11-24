@@ -8,7 +8,8 @@ import { HOUSE_RULES } from "@/lib/sections";
 import { InviteCard } from "@/components/InviteCard";
 import { InviteEditor, type InviteData } from "@/components/InviteEditor";
 import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
-import { linkPaste } from "@/lib/link-paste";
+import { RichStory } from "@/components/RichStory";
+import { uploadShortId } from "@/lib/inline-media";
 import { useFormDraft } from "@/lib/use-form-draft";
 import { DraftRestore, DraftSavedNote } from "@/components/DraftRestore";
 import { songsFromLines, songsToLines, type Song } from "@/lib/tracks";
@@ -534,6 +535,7 @@ function AccountsPanel({ nightId, accounts, rsvps }: { nightId: string; accounts
 
 function DraftPanel({
   nightId,
+  uploads,
   draft,
   body,
   review,
@@ -542,6 +544,7 @@ function DraftPanel({
   maxGenerations,
 }: {
   nightId: string;
+  uploads: Upload[];
   draft: Draft | null;
   body: ReactNode;
   review: { approvals: number; notes: Array<{ nickname: string | null; body: string }> };
@@ -660,9 +663,21 @@ function DraftPanel({
           </div>
           <div>
             <label htmlFor="draft-body" className="mb-1 block text-sm font-bold">Body</label>
-            <textarea id="draft-body" name="body" required rows={16} maxLength={60000} defaultValue={draft?.body ?? ""} onPaste={linkPaste} className="field leading-relaxed" />
-            <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link. A line like [[photo:a1b2c3d4]] puts that photo there: move it or delete the line.</p>
-            <p className="mt-1 text-sm text-dim">Link a place with [Rick&apos;s](https://its-website.com). Saving makes a new version, and approvals start over.</p>
+            <RichStory
+              name="body"
+              id="draft-body"
+              defaultValue={draft?.body ?? ""}
+              photos={uploads
+                .filter((u) => u.kind === "photo" || u.kind === "video")
+                .map((u) => ({
+                  marker: `photo:${uploadShortId(u.r2_key)}`,
+                  src: u.src,
+                  kind: u.kind,
+                  caption: u.caption,
+                  note: u.decision === "toss" ? "Tossed: won't be in the post" : u.decision === "keep" ? null : "Not kept yet: mark Keep",
+                }))}
+            />
+            <p className="mt-1 text-sm text-dim">Select words to bold or link them. Paste a link over selected words to link them. Use <strong>+ Add photo here</strong> to put a photo where your cursor is. Saving makes a new version, and approvals start over.</p>
           </div>
           <div>
             <label htmlFor="draft-songs" className="mb-1 block text-sm font-bold">Songs of the night</label>
@@ -872,6 +887,7 @@ export function NightAdmin(props: {
       {!dropped && (
         <DraftPanel
           nightId={night.id}
+          uploads={props.uploads}
           draft={props.draft}
           body={props.draftBody}
           review={props.review}

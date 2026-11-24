@@ -107,7 +107,10 @@ export function useFormDraft<E>({
     if (f) {
       for (const [name, value] of Object.entries(pending.fields)) {
         const el = f.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | null;
-        if (el && "value" in el) el.value = value;
+        if (el && "value" in el) {
+          el.value = value;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+        }
       }
     }
     if (setExtra) setExtra(pending.extra);

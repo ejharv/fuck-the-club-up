@@ -8,7 +8,8 @@ import { PhoneUploadQR } from "@/components/PhoneUploadQR";
 import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
 import { MAX_FILES_PER_POST } from "@/lib/media-rules";
 import { HOUSE_RULES } from "@/lib/sections";
-import { linkPaste } from "@/lib/link-paste";
+import { RichStory } from "@/components/RichStory";
+import { uploadShortId } from "@/lib/inline-media";
 import { useFormDraft } from "@/lib/use-form-draft";
 import { DraftRestore, DraftSavedNote } from "@/components/DraftRestore";
 import { songsToLines } from "@/lib/tracks";
@@ -24,7 +25,7 @@ type Fields = {
   rideHome: string;
   body: string;
 };
-type Media = { id: string; kind: string; caption: string; preview: string | null; label: string; isCover: boolean };
+type Media = { id: string; kind: string; caption: string; preview: string | null; src?: string | null; label: string; isCover: boolean };
 
 export function EditPostForm({
   post,
@@ -54,7 +55,10 @@ export function EditPostForm({
   const apply = (patch: Partial<AssistFields>) => {
     for (const [k, v] of Object.entries(patch)) {
       const el = field(k);
-      if (el && typeof v === "string") el.value = v;
+      if (el && typeof v === "string") {
+        el.value = v;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     }
   };
   const [items, setItems] = useState(media.map((m) => ({ ...m, remove: false })));
@@ -150,8 +154,20 @@ export function EditPostForm({
 
       <div>
         <label htmlFor="body" className="mb-2 block font-bold">The story</label>
-        <textarea id="body" name="body" required rows={14} maxLength={60000} defaultValue={post.body} onPaste={linkPaste} className="field leading-relaxed" />
-        <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link. A line like [[media:…]] is a photo placed in the story: move it or delete the line (deleting it moves the photo to the gallery).</p>
+        <RichStory
+          name="body"
+          id="body"
+          defaultValue={post.body}
+          photos={[
+            ...items
+              .filter((i) => !i.remove && (i.kind === "photo" || i.kind === "video"))
+              .map((i) => ({ marker: `media:${i.id}`, src: i.src ?? i.preview ?? null, kind: i.kind, caption: i.caption })),
+            ...adding
+              .filter((i) => i.key && (i.kind === "photo" || i.kind === "video"))
+              .map((i) => ({ marker: `new:${uploadShortId(i.key!)}`, src: i.preview ?? null, kind: i.kind!, caption: i.caption })),
+          ]}
+        />
+        <p className="mt-1 text-sm text-dim">Select words to bold or link them. Paste a link over selected words to link them. Use <strong>+ Add photo here</strong> to put a photo where your cursor is. Removing a photo from the story moves it to the gallery at the end.</p>
       </div>
 
       {items.length > 0 && (

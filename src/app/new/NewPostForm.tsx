@@ -8,7 +8,8 @@ import { PhoneUploadQR } from "@/components/PhoneUploadQR";
 import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
 import { MAX_FILES_PER_POST } from "@/lib/media-rules";
 import { HOUSE_RULES } from "@/lib/sections";
-import { linkPaste } from "@/lib/link-paste";
+import { RichStory } from "@/components/RichStory";
+import { uploadShortId } from "@/lib/inline-media";
 import { useFormDraft } from "@/lib/use-form-draft";
 import { DraftRestore, DraftSavedNote } from "@/components/DraftRestore";
 import { songsToLines } from "@/lib/tracks";
@@ -46,7 +47,10 @@ export function NewPostForm({ today }: { today: string }) {
   const apply = (patch: Partial<AssistFields>) => {
     for (const [k, v] of Object.entries(patch)) {
       const el = field(FIELD_NAMES[k as keyof AssistFields]);
-      if (el && typeof v === "string") el.value = v;
+      if (el && typeof v === "string") {
+        el.value = v;
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
     }
   };
   const addFromPhone = useCallback((fresh: PickedItem[]) => setItems((l) => [...l, ...fresh]), []);
@@ -125,8 +129,16 @@ export function NewPostForm({ today }: { today: string }) {
 
       <div>
         <label htmlFor="body" className="mb-2 block font-bold">The story</label>
-        <textarea id="body" name="body" required rows={12} maxLength={60000} onPaste={linkPaste} className="field leading-relaxed" placeholder="Start from the pregame. Short paragraphs, real details. Rough notes are fine: writing help can turn them into a post." />
-        <p className="mt-1 text-sm text-dim">Paste links straight in. To link some words, select them and paste the link.</p>
+        <RichStory
+          name="body"
+          id="body"
+          defaultValue=""
+          placeholder="Start from the pregame. Short paragraphs, real details. Rough notes are fine: writing help can turn them into a post."
+          photos={items
+            .filter((i) => i.key && (i.kind === "photo" || i.kind === "video"))
+            .map((i) => ({ marker: `new:${uploadShortId(i.key!)}`, src: i.preview ?? null, kind: i.kind!, caption: i.caption }))}
+        />
+        <p className="mt-1 text-sm text-dim">Select words to bold or link them. Paste a link over selected words to link them. Use <strong>+ Add photo here</strong> to put a photo where your cursor is.</p>
       </div>
 
       <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">

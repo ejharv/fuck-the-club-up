@@ -48,6 +48,7 @@ export default async function EditPost({ params }: { params: Promise<{ slug: str
           kind: m.kind,
           caption: m.caption ?? "",
           preview: m.kind === "photo" && m.r2_key ? mediaUrl(m.r2_key, env.MEDIA_PUBLIC_URL) : null,
+          src: (m.kind === "photo" || m.kind === "video") && m.r2_key ? mediaUrl(m.r2_key, env.MEDIA_PUBLIC_URL) : null,
           label: m.kind === "embed" ? (m.url ?? "Link") : m.kind,
           isCover: Boolean(m.r2_key && m.r2_key === post.cover_key),
         }))}

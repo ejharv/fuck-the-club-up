@@ -5,6 +5,8 @@
  */
 export const PHOTO_RE = /\[\[photo:([0-9a-f]{8})\]\]/g;
 export const MEDIA_RE = /\[\[media:([0-9a-f-]{36})\]\]/g;
+/** A photo placed in the editor before the post is saved: short id of its upload key. */
+export const NEW_RE = /\[\[new:([0-9a-f]{8})\]\]/g;
 
 /** Short id for a night upload, from its key ".../<uuid>.<ext>". */
 export function uploadShortId(r2Key: string): string {
@@ -30,7 +32,7 @@ export function cleanMarkers(body: string, re: RegExp, allowed: Set<string>, pre
 
 /** Body without any markers (excerpts, places that don't render photos). */
 export const stripMarkers = (body: string) =>
-  body.replace(PHOTO_RE, "").replace(MEDIA_RE, "").replace(/\n{3,}/g, "\n\n").trim();
+  body.replace(PHOTO_RE, "").replace(MEDIA_RE, "").replace(NEW_RE, "").replace(/\n{3,}/g, "\n\n").trim();
 
 /** Split a body into text chunks and marker ids, in order. */
 export function splitOnMarkers(body: string, re: RegExp): Array<{ text: string } | { id: string }> {
@@ -45,4 +47,11 @@ export function splitOnMarkers(body: string, re: RegExp): Array<{ text: string }
   const rest = body.slice(last);
   if (rest.trim()) parts.push({ text: rest });
   return parts;
+}
+
+/** Turn [[new:…]] markers into [[media:…]] once uploads have media ids, then tidy. */
+export function resolveNewMarkers(body: string, keyToId: Map<string, string>, allMediaIds: Iterable<string>): string {
+  const byShort = new Map([...keyToId].map(([key, id]) => [uploadShortId(key), id]));
+  const replaced = body.replace(NEW_RE, (_m, s: string) => (byShort.has(s) ? `[[media:${byShort.get(s)}]]` : ""));
+  return cleanMarkers(replaced, MEDIA_RE, new Set(allMediaIds), "media");
 }
