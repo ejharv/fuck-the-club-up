@@ -9,7 +9,10 @@ import { getPost, type MediaRow } from "@/lib/db";
 import { toEmbed } from "@/lib/embeds";
 import { cf } from "@/lib/env";
 import { mediaUrl } from "@/lib/media-url";
+import { postSongs, postVenues } from "@/lib/collections";
 import { sectionBySlug } from "@/lib/sections";
+import { spotifySearch } from "@/lib/tracks";
+import { placeAnchor } from "@/lib/venues";
 import { currentMember } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -101,7 +104,7 @@ export default async function PostPage({ params }: Props) {
   const found = await getPost((await params).slug);
   if (!found) notFound();
   const { post, media } = found;
-  const [env, member] = await Promise.all([cf(), currentMember()]);
+  const [env, member, venues, songs] = await Promise.all([cf(), currentMember(), postVenues(found.post.id), postSongs(found.post.id)]);
   const section = sectionBySlug(post.section);
   const canEdit = Boolean(member && (member.email === post.author_email || member.role === "admin"));
   // Photos sit in a 2-up grid; with an odd count the first one runs full width so nothing is left hanging.
@@ -138,8 +141,53 @@ export default async function PostPage({ params }: Props) {
         <Markdown>{post.body}</Markdown>
       </div>
 
+      {(venues.length > 0 || songs.length > 0) && (
+        <div className="mt-14 grid max-w-4xl gap-8 sm:grid-cols-2">
+          {venues.length > 0 && (
+            <section aria-labelledby="where">
+              <h2 id="where" className="display text-2xl">Where we went</h2>
+              <ul className="mt-4 space-y-2">
+                {venues.map((v, i) => (
+                  <li key={i} className="flex min-h-11 items-center justify-between gap-3 rounded border border-line bg-night-2 px-3">
+                    <Link href={`/places#${placeAnchor(v.place_key)}`} className="truncate font-bold hover:text-maize">{v.name}</Link>
+                    <span className="flex shrink-0 items-center gap-3">
+                      <span className={`mono ${v.kind === "eat" ? "text-pink" : "text-maize"}`}>{v.kind === "eat" ? "Eat" : "Party"}</span>
+                      {v.url && (
+                        <a href={v.url} target="_blank" rel="noopener noreferrer nofollow" className="mono tap -mr-2 text-dim hover:text-ink" aria-label={`${v.name} website`}>
+                          Site
+                        </a>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {songs.length > 0 && (
+            <section aria-labelledby="songs">
+              <h2 id="songs" className="display text-2xl">Songs of the night</h2>
+              <ol className="mt-4 space-y-2">
+                {songs.map((t, i) => {
+                  const href = t.url ?? (t.source === "upload" ? "#media" : spotifySearch(t));
+                  const external = !href.startsWith("#");
+                  return (
+                    <li key={i}>
+                      <a href={href} {...(external ? { target: "_blank", rel: "noopener noreferrer nofollow" } : {})} className="flex min-h-11 items-center justify-between gap-3 rounded border border-line bg-night-2 px-3 hover:border-maize">
+                        <span className="min-w-0 truncate"><strong>{t.title}</strong>{t.artist ? <span className="text-dim"> · {t.artist}</span> : null}</span>
+                        <span className="mono shrink-0 text-maize">{t.url ? "Play" : t.source === "upload" ? "Listen" : "Find it"}</span>
+                      </a>
+                    </li>
+                  );
+                })}
+              </ol>
+              <Link href={`/playlists#${post.slug}`} className="mono tap mt-2 -ml-2 text-dim hover:text-maize">All playlists</Link>
+            </section>
+          )}
+        </div>
+      )}
+
       {media.length > 0 && (
-        <section aria-label="Photos, videos and music" className="mt-12 grid max-w-4xl grid-cols-2 gap-x-2 gap-y-4 sm:mt-16 sm:gap-x-4 sm:gap-y-6">
+        <section id="media" aria-label="Photos, videos and music" className="mt-12 grid max-w-4xl grid-cols-2 gap-x-2 gap-y-4 sm:mt-16 sm:gap-x-4 sm:gap-y-6">
           {media.map((m) => (
             <MediaBlock key={m.id} item={m} base={env.MEDIA_PUBLIC_URL} canEdit={canEdit} wide={m.id === loneLeadPhoto} />
           ))}

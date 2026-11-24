@@ -20,22 +20,26 @@ export type SiteContent = {
   footerLine: string;
   footerRules: string;
   sectionBlurbs: Record<string, string>;
+  playlistsIntro: string;
+  placesIntro: string;
   privacyBody: string; // markdown, {{contact}} is replaced with legalContact
   termsBody: string; // markdown
   legalContact: string; // markdown
 };
 
 export const DEFAULT_CONTENT: SiteContent = {
-  homeKicker: "Ann Arbor · after dark · est. 2026",
+  homeKicker: "After dark · est. 2026",
   homeLede: "The nights, the places, and the stories that turned into lore. Told by the people who remember them.",
   aboutBody:
-    "Fuck The Club Up is a blog about going out in college and right after it: the nights, the places, and the stories that turned into lore. Ann Arbor first.\n\nIt's written by a crew of friends recapping the weekend the way they would at brunch: loud, specific, and roasting themselves first.",
+    "Fuck The Club Up is a blog about going out in college and right after it: the nights, the places, and the stories that turned into lore. Wherever the night goes.\n\nIt's written by a crew of friends recapping the weekend the way they would at brunch: loud, specific, and roasting themselves first.",
   houseRules: HOUSE_RULES.map((r) => ({ title: r.title, text: r.text })),
   storyTitle: "Got a story?",
   storyBody: "Send us the night. We change the names, keep the chaos.",
-  footerLine: "Going out in Ann Arbor, written by the people who were there.",
+  footerLine: "Going out, written by the people who were there.",
   footerRules: "No names without a yes · Nobody drives · Water between rounds",
   sectionBlurbs: Object.fromEntries(SECTIONS.map((s) => [s.slug, s.blurb])),
+  playlistsIntro: "Every song from every night: the ones people linked and the ones that got named in the story. Tap a night to read what happened.",
+  placesIntro: "Where the crew actually went, pulled from the night reports. Each place links to the nights it shows up in.",
   privacyBody: DEFAULT_PRIVACY,
   termsBody: DEFAULT_TERMS,
   legalContact: DEFAULT_CONTACT,

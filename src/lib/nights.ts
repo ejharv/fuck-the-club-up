@@ -15,6 +15,11 @@ export type Night = {
   location_text: string | null;
   dress_code: string | null;
   venues: string | null;
+  capacity: number | null;
+  max_plus_ones: number;
+  invite_rules: string | null;
+  invite_media_key: string | null;
+  invite_media_kind: "video" | "photo" | null;
   status: NightStatus;
   max_files: number;
   max_bytes: number;
@@ -49,11 +54,12 @@ export type Draft = {
   damage: string | null;
   ride_home: string | null;
   body: string;
+  songs: string | null; // JSON [{title, artist}]
   source: "claude" | "edit";
   created_at: string;
 };
 
-const NIGHT_COLUMNS = `id, name, night_of, opens_at, closes_at, invite_details, location_text, dress_code, venues, status, max_files, max_bytes, per_device_files, album_open,
+const NIGHT_COLUMNS = `id, name, night_of, opens_at, closes_at, invite_details, location_text, dress_code, venues, capacity, max_plus_ones, invite_rules, invite_media_key, invite_media_kind, status, max_files, max_bytes, per_device_files, album_open,
   drop_at, drop_fields, generations, generating_since, post_id, created_at`;
 
 export async function getNight(id: string): Promise<Night | null> {
@@ -68,16 +74,8 @@ export async function nightByToken(token: string): Promise<Night | null> {
   return DB.prepare(`SELECT ${NIGHT_COLUMNS} FROM nights WHERE token_hash = ?`).bind(await sha256Hex(token)).first<Night>();
 }
 
-export type Venue = { name: string; url: string };
-
-export function parseVenues(raw: string | null): Venue[] {
-  try {
-    const v = JSON.parse(raw ?? "[]");
-    return Array.isArray(v) ? v.filter((x) => typeof x?.name === "string" && typeof x?.url === "string") : [];
-  } catch {
-    return [];
-  }
-}
+export type { Venue } from "./venues";
+export { parseVenueJson as parseVenues } from "./venues";
 
 export type Phase = "invite" | "live" | "after" | "dropped";
 
@@ -107,7 +105,7 @@ export function isStuckDrop(n: Pick<Night, "status" | "post_id">) {
 export async function latestDraft(nightId: string): Promise<Draft | null> {
   const { DB } = await cf();
   return DB.prepare(
-    "SELECT version, title, dek, night_label, damage, ride_home, body, source, created_at FROM night_drafts WHERE night_id = ? ORDER BY version DESC LIMIT 1",
+    "SELECT version, title, dek, night_label, damage, ride_home, body, songs, source, created_at FROM night_drafts WHERE night_id = ? ORDER BY version DESC LIMIT 1",
   )
     .bind(nightId)
     .first<Draft>();
@@ -177,7 +175,7 @@ export async function verifyTurnstile(env: CloudflareEnv, token: string, ip: str
   return data.success === true;
 }
 
-/** Default close: noon the day after the night, Ann Arbor time. */
+/** Default close: noon the day after the night, Michigan time. */
 export function defaultClosesAt(nightOf: string): string {
   const [y, m, d] = nightOf.split("-").map(Number);
   // Noon Detroit is 16:00 or 17:00 UTC depending on DST; find the right one.

@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { updatePost } from "@/app/actions";
+import { ClaudeAssist, type AssistFields } from "@/components/ClaudeAssist";
 import { MediaPicker, pickerBusy, pickerFailed, type PickedItem } from "@/components/MediaPicker";
+import { PhoneUploadQR } from "@/components/PhoneUploadQR";
+import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
 import { MAX_FILES_PER_POST } from "@/lib/media-rules";
-import { HOUSE_RULES, SECTIONS } from "@/lib/sections";
+import { HOUSE_RULES } from "@/lib/sections";
+import { songsToLines } from "@/lib/tracks";
 
 type Fields = {
   id: string;
@@ -19,13 +23,43 @@ type Fields = {
 };
 type Media = { id: string; kind: string; caption: string; preview: string | null; label: string; isCover: boolean };
 
-export function EditPostForm({ post, media, today }: { post: Fields; media: Media[]; today: string }) {
-  const [section, setSection] = useState(post.section);
+export function EditPostForm({
+  post,
+  media,
+  today,
+  venues: initialVenues,
+  songsText,
+}: {
+  post: Fields;
+  media: Media[];
+  today: string;
+  venues: VenueRow[];
+  songsText: string;
+}) {
+  const form = useRef<HTMLFormElement>(null);
+  const [venues, setVenues] = useState<VenueRow[]>(initialVenues.length ? initialVenues : [blankVenue()]);
+  const [songs, setSongs] = useState(songsText);
+  const field = (name: string) => form.current?.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | null;
+  const getFields = (): AssistFields => ({
+    title: field("title")?.value ?? "",
+    dek: field("dek")?.value ?? "",
+    night: field("night")?.value ?? "",
+    damage: field("damage")?.value ?? "",
+    rideHome: field("rideHome")?.value ?? "",
+    body: field("body")?.value ?? "",
+  });
+  const apply = (patch: Partial<AssistFields>) => {
+    for (const [k, v] of Object.entries(patch)) {
+      const el = field(k);
+      if (el && typeof v === "string") el.value = v;
+    }
+  };
   const [items, setItems] = useState(media.map((m) => ({ ...m, remove: false })));
   const [cover, setCover] = useState<string | null>(media.find((m) => m.isCover)?.id ?? null);
   const [adding, setAdding] = useState<PickedItem[]>([]);
   const [newCover, setNewCover] = useState<string | null>(null);
   const uploading = pickerBusy(adding);
+  const addFromPhone = useCallback((fresh: PickedItem[]) => setAdding((l) => [...l, ...fresh]), []);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -38,7 +72,7 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
         id: post.id,
         title: String(form.get("title") ?? ""),
         dek: String(form.get("dek") ?? ""),
-        section: String(form.get("section") ?? ""),
+        section: "night-reports",
         night: String(form.get("night") ?? ""),
         nightOf: String(form.get("nightOf") ?? ""),
         damage: String(form.get("damage") ?? ""),
@@ -50,21 +84,21 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
         coverMediaId: cover,
         addMedia: adding.map((i) => ({ key: i.key, url: i.url, caption: i.caption })),
         coverNewKey: newCover,
+        venues,
+        songsText: songs,
       });
       if (result?.error) setError(result.error);
     });
   }
 
   return (
-    <form action={submit} className="mt-8 space-y-7">
-      <div>
-        <label htmlFor="section" className="mb-2 block font-bold">Section</label>
-        <select id="section" name="section" value={section} onChange={(e) => setSection(e.target.value)} className="field">
-          {SECTIONS.map((s) => (
-            <option key={s.slug} value={s.slug}>{s.name}</option>
-          ))}
-        </select>
-      </div>
+    <form ref={form} action={submit} className="mt-8 space-y-7">
+      <ClaudeAssist
+        getFields={getFields}
+        venues={venues.filter((v) => v.name).map((v) => ({ name: v.name, url: v.url }))}
+        onApply={apply}
+        onSongs={(s) => setSongs((cur) => [cur.trim(), songsToLines(s)].filter(Boolean).join("\n"))}
+      />
       <div>
         <label htmlFor="title" className="mb-2 block font-bold">Title</label>
         <input id="title" name="title" required maxLength={140} defaultValue={post.title} autoComplete="off" enterKeyHint="next" className="field text-xl" />
@@ -90,8 +124,8 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
             <input id="damage" name="damage" maxLength={80} defaultValue={post.damage} className="field" />
           </div>
           <div>
-            <label htmlFor="rideHome" className="mb-2 block text-sm font-bold">Ride home{section === "night-reports" ? "" : " (optional)"}</label>
-            <input id="rideHome" name="rideHome" maxLength={160} required={section === "night-reports"} defaultValue={post.rideHome} className="field" />
+            <label htmlFor="rideHome" className="mb-2 block text-sm font-bold">Ride home</label>
+            <input id="rideHome" name="rideHome" maxLength={160} required defaultValue={post.rideHome} className="field" />
           </div>
         </div>
       </fieldset>
@@ -150,7 +184,16 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
       )}
 
       <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">
+        <legend className="mono px-2 text-maize">Where we went</legend>
+        <p className="mb-4 text-sm text-dim">These show up on the Places tab, linked back to this post.</p>
+        <VenuesEditor rows={venues} setRows={setVenues} />
+      </fieldset>
+
+      <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">
         <legend className="mono px-2 text-maize">Add photos, videos and music</legend>
+        <div className="mb-4">
+          <PhoneUploadQR onFiles={addFromPhone} />
+        </div>
         <MediaPicker
           items={adding}
           setItems={setAdding}
@@ -160,6 +203,12 @@ export function EditPostForm({ post, media, today }: { post: Fields; media: Medi
         />
         <p className="mt-3 text-sm text-dim">Tap a new photo to make it the cover. New files are added at the end of the post.</p>
       </fieldset>
+
+      <div>
+        <label htmlFor="songs" className="mb-2 block font-bold">Songs of the night</label>
+        <textarea id="songs" value={songs} onChange={(e) => setSongs(e.target.value)} rows={4} className="field font-mono text-[16px] leading-relaxed sm:text-sm" placeholder={"The Killers - Mr. Brightside\nDancing Queen"} />
+        <p className="mt-1 text-sm text-dim">One per line. Music links in the post are included automatically.</p>
+      </div>
 
       <label className="flex cursor-pointer gap-3 rounded-md border border-line bg-night-2 p-4">
         <input type="checkbox" name="consent" value="yes" required className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />

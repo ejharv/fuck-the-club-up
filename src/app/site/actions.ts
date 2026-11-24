@@ -18,6 +18,8 @@ export type SiteInput = {
   footerLine: string;
   footerRules: string;
   sectionBlurbs: Record<string, string>;
+  playlistsIntro: string;
+  placesIntro: string;
   privacyBody: string;
   termsBody: string;
   legalContact: string;
@@ -43,6 +45,8 @@ export async function saveSiteContent(input: SiteInput): Promise<SiteResult> {
       storyBody: str(input.storyBody, L.medium),
       footerLine: str(input.footerLine, L.medium),
       footerRules: str(input.footerRules, L.medium),
+      playlistsIntro: str(input.playlistsIntro, L.medium),
+      placesIntro: str(input.placesIntro, L.medium),
       privacyBody: str(input.privacyBody, L.legal),
       termsBody: str(input.termsBody, L.legal),
       legalContact: str(input.legalContact, L.medium),

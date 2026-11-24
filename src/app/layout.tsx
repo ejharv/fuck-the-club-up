@@ -2,9 +2,17 @@ import type { Metadata } from "next";
 import { Archivo, Bowlby_One, JetBrains_Mono } from "next/font/google";
 import Link from "next/link";
 import { signOutAction } from "./actions";
-import { SECTIONS, SITE_URL } from "@/lib/sections";
+import { SITE_URL } from "@/lib/sections";
+
+const TABS = [
+  { href: "/night-reports", label: "Night Reports" },
+  { href: "/playlists", label: "Playlists" },
+  { href: "/places", label: "Places" },
+  { href: "/about", label: "About" },
+];
 import { cf } from "@/lib/env";
-import { currentMember } from "@/lib/session";
+import { isAnyHost } from "@/lib/hosting";
+import { currentMember, signedInEmail } from "@/lib/session";
 import { getSiteContent } from "@/lib/site-content";
 import "./globals.css";
 
@@ -19,7 +27,8 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  const [member, content] = await Promise.all([currentMember(), getSiteContent()]);
+  const [member, content, email] = await Promise.all([currentMember(), getSiteContent(), signedInEmail()]);
+  const hostOnly = !member && (await isAnyHost(email));
   const openTakedowns =
     member?.role === "admin"
       ? ((await (await cf()).DB.prepare("SELECT COUNT(*) AS n FROM takedown_requests WHERE status = 'open'").first<{ n: number }>())?.n ?? 0)
@@ -44,7 +53,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                   {member.role === "admin" && (
                     <>
                       <Link href="/nights" className="tap hover:text-maize">
-                        Nights
+                        Host
                       </Link>
                       <Link href="/crew" className="tap hidden hover:text-maize sm:inline-flex">
                         Crew
@@ -66,6 +75,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                     <button className="tap uppercase tracking-[inherit] text-dim hover:text-ink">Sign out</button>
                   </form>
                 </>
+              ) : hostOnly ? (
+                <>
+                  <Link href="/nights" className="tap hover:text-maize">
+                    Host
+                  </Link>
+                  <form action={signOutAction}>
+                    <button className="tap uppercase tracking-[inherit] text-dim hover:text-ink">Sign out</button>
+                  </form>
+                </>
               ) : (
                 <Link href="/login" className="tap text-dim hover:text-ink">
                   Crew sign in
@@ -73,20 +91,15 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
               )}
             </div>
           </div>
-          <nav aria-label="Sections" className="mono mt-1 pb-1 sm:mt-2">
+          <nav aria-label="Site" className="mono mt-1 pb-1 sm:mt-2">
             <ul className="-mx-2 flex flex-wrap text-dim">
-              {SECTIONS.map((s) => (
-                <li key={s.slug}>
-                  <Link href={`/section/${s.slug}`} className="tap whitespace-nowrap hover:text-maize">
-                    {s.name}
+              {TABS.map((t) => (
+                <li key={t.href}>
+                  <Link href={t.href} className="tap whitespace-nowrap hover:text-maize">
+                    {t.label}
                   </Link>
                 </li>
               ))}
-              <li>
-                <Link href="/about" className="tap whitespace-nowrap hover:text-maize">
-                  About
-                </Link>
-              </li>
             </ul>
           </nav>
         </header>

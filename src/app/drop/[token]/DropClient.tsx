@@ -76,16 +76,22 @@ function Turnstile({ token, siteKey, phase }: { token: string; siteKey: string; 
 function useAction() {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const run = (fn: () => Promise<{ error: string } | { ok: true } | undefined>, okText: string) =>
+  const run = (fn: () => Promise<{ error: string } | { ok: true; waitlisted?: boolean } | undefined>, okText: string) =>
     start(async () => {
       const r = await fn();
-      setMsg(r && "error" in r ? { ok: false, text: r.error } : { ok: true, text: okText });
+      if (r && "error" in r) setMsg({ ok: false, text: r.error });
+      else if (r && "waitlisted" in r && r.waitlisted) setMsg({ ok: true, text: "It's full, so you're on the waitlist. You'll move up automatically if a spot opens." });
+      else setMsg({ ok: true, text: okText });
     });
   return { pending, msg, run };
 }
 
-function Rsvp({ token, current }: { token: string; current: { nickname: string; answer: string } | null }) {
+type MyRsvp = { nickname: string; answer: string; plusOnes: number; waitlisted: boolean };
+type GuestInfo = { maxPlusOnes: number; spotsLeft: number | null; waitlist: number };
+
+function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null; info: GuestInfo }) {
   const [nickname, setNickname] = useState(current?.nickname ?? "");
+  const [plus, setPlus] = useState(current?.plusOnes ?? 0);
   const { pending, msg, run } = useAction();
   const choices = [
     ["going", "I'm in"],
@@ -93,17 +99,32 @@ function Rsvp({ token, current }: { token: string; current: { nickname: string; 
     ["cant", "Can't make it"],
   ] as const;
   const currentLabel = choices.find(([v]) => v === current?.answer)?.[1];
+  const full = info.spotsLeft === 0 && !(current?.answer === "going" && !current.waitlisted);
+  const send = (value: string) =>
+    run(async () => {
+      const r = await rsvp(token, nickname, value, value === "going" ? plus : 0);
+      return r;
+    }, value === "cant" ? "Got it. Next time." : value === "maybe" ? "Marked as maybe." : "You're in.");
   return (
     <section id="rsvp" className="mt-8 scroll-mt-4 rounded-md border border-line bg-night-2 p-5">
       <h2 className="display text-3xl">Are you coming?</h2>
       {current && currentLabel ? (
         <p className="mt-2 text-dim">
-          You said <span className="font-bold text-maize">{currentLabel}</span> as {current.nickname}. Tap another answer to change it.
+          {current.answer === "going" && current.waitlisted ? (
+            <>You&apos;re on the <span className="font-bold text-pink">waitlist</span> as {current.nickname}. If a spot opens up, you&apos;re in automatically.</>
+          ) : (
+            <>You said <span className="font-bold text-maize">{currentLabel}</span> as {current.nickname}{current.plusOnes ? ` +${current.plusOnes}` : ""}. Tap another answer to change it.</>
+          )}
         </p>
       ) : (
-        <p className="mt-2 text-dim">Pick a nickname and tap an answer. That&apos;s it.</p>
+        <p className="mt-2 text-dim">Add your name or a nickname and tap an answer. That&apos;s it.</p>
       )}
-      <label htmlFor="rsvp-nick" className="mt-4 block font-bold">Your nickname</label>
+      {info.spotsLeft !== null && (
+        <p className={`mono mt-3 ${info.spotsLeft ? "text-maize" : "text-pink"}`}>
+          {info.spotsLeft ? `${info.spotsLeft} ${info.spotsLeft === 1 ? "spot" : "spots"} left` : `Full${info.waitlist ? ` · ${info.waitlist} on the waitlist` : ""}`}
+        </p>
+      )}
+      <label htmlFor="rsvp-nick" className="mt-4 block font-bold">Your name or nickname</label>
       <input
         id="rsvp-nick"
         value={nickname}
@@ -112,8 +133,27 @@ function Rsvp({ token, current }: { token: string; current: { nickname: string; 
         autoComplete="nickname"
         enterKeyHint="done"
         className="field mt-2 min-h-12 sm:w-72"
-        placeholder="What the group chat calls you"
+        placeholder="Whatever you want to go by"
       />
+      {info.maxPlusOnes > 0 && (
+        <div className="mt-4">
+          <span id="plus-label" className="block font-bold">Bringing anyone?</span>
+          <div role="radiogroup" aria-labelledby="plus-label" className="mt-2 flex flex-wrap gap-2">
+            {Array.from({ length: info.maxPlusOnes + 1 }, (_, n) => (
+              <button
+                key={n}
+                type="button"
+                role="radio"
+                aria-checked={plus === n}
+                onClick={() => setPlus(n)}
+                className={`min-h-11 min-w-14 rounded-full border px-4 font-bold ${plus === n ? "border-maize bg-maize text-night" : "border-line hover:border-maize"}`}
+              >
+                {n === 0 ? "Just me" : `+${n}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="mt-4 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-3">
         {choices.map(([value, label]) => (
           <button
@@ -121,12 +161,12 @@ function Rsvp({ token, current }: { token: string; current: { nickname: string; 
             type="button"
             disabled={pending}
             aria-pressed={current?.answer === value}
-            onClick={() => run(() => rsvp(token, nickname, value), value === "cant" ? "Got it. Next time." : "You're on the list.")}
+            onClick={() => send(value)}
             className={`min-h-12 rounded-full border px-3 py-2 font-bold leading-tight disabled:opacity-60 sm:px-5 ${
               current?.answer === value ? "border-maize bg-maize text-night" : "border-ink hover:border-maize hover:text-maize"
             }`}
           >
-            {label}
+            {value === "going" && full ? "Join waitlist" : label}
           </button>
         ))}
       </div>
@@ -211,7 +251,7 @@ function Uploader({ token }: { token: string }) {
       <p className="mt-2 text-dim">Straight from your camera roll. Pick as many as you want.</p>
 
       <label htmlFor="up-nick" className="mt-5 block font-bold">
-        Nickname <span className="font-normal text-dim">(optional, for credit)</span>
+        Name or nickname <span className="font-normal text-dim">(optional, for credit)</span>
       </label>
       <input
         id="up-nick"
@@ -306,10 +346,10 @@ function Account({ token, account, count }: { token: string; account: { nickname
     <section id="story" className="mt-14 scroll-mt-4">
       <h2 className="display text-3xl">Your side of the story</h2>
       <p className="mt-2 text-dim">
-        What happened, from where you were standing. Times, prices, the line, who did what (use nicknames). Claude stitches everyone&apos;s version into one post.
+        What happened, from where you were standing. Times, prices, the line, who did what. Use nicknames for other people unless they said yes. Claude stitches everyone&apos;s version into one post.
       </p>
       {count > 0 && <p className="mono mt-3 text-maize">{plural(count, "account")} in so far</p>}
-      <label htmlFor="acct-nick" className="mt-5 block font-bold">Nickname</label>
+      <label htmlFor="acct-nick" className="mt-5 block font-bold">Your name or nickname <span className="font-normal text-dim">(this is what shows up)</span></label>
       <input
         id="acct-nick"
         value={nickname}
@@ -424,7 +464,7 @@ function Review({ token, draft, body, wrote }: { token: string; draft: Draft; bo
           <p className="mt-2 text-dim">No notes yet. Something wrong? Say so.</p>
         )}
         <div className="mt-4 grid gap-3 sm:grid-cols-[12rem_1fr]">
-          <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40} aria-label="Your nickname" placeholder="Nickname" autoComplete="nickname" className="field min-h-12" />
+          <input value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40} aria-label="Your name or nickname" placeholder="Name or nickname" autoComplete="nickname" className="field min-h-12" />
           <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={600} aria-label="Your note" placeholder='"I did NOT cry at Taco Bell"' enterKeyHint="send" className="field min-h-12" />
         </div>
         <button
@@ -448,7 +488,7 @@ function Album({ token, items }: { token: string; items: Array<{ key: string; ki
     <section id="album" className="mt-14 scroll-mt-4">
       <h2 className="display text-3xl">The album</h2>
       <p className="mt-2 text-dim">
-        {plural(items.length, "file")}. Anyone with this link can see and download them, so don&apos;t forward it around.
+        {plural(items.length, "file")}. Anyone with this link can see and download them.
       </p>
       <ul className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
         {items.map((m) => (
@@ -497,7 +537,8 @@ export function DropClient(props: {
   phase: Phase;
   verified: boolean;
   siteKey: string;
-  rsvp: { nickname: string; answer: string } | null;
+  rsvp: MyRsvp | null;
+  guestInfo: GuestInfo;
   account: { nickname: string; body: string } | null;
   accountCount: number;
   album: Array<{ key: string; kind: string; nickname: string | null }>;
@@ -521,7 +562,7 @@ export function DropClient(props: {
   return (
     <>
       {canAct && !verified && <Turnstile token={token} siteKey={props.siteKey} phase={phase} />}
-      {verified && phase === "invite" && <Rsvp token={token} current={props.rsvp} />}
+      {verified && phase === "invite" && <Rsvp token={token} current={props.rsvp} info={props.guestInfo} />}
       {verified && phase !== "invite" && <JumpNav links={jump} />}
       {verified && phase === "live" && <Uploader token={token} />}
       {showDraft && draftFirst && review}

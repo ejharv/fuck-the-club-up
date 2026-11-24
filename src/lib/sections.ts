@@ -1,11 +1,6 @@
 /** Sections from docs/briefs/01-concept.md. */
 export const SECTIONS = [
   { slug: "night-reports", name: "Night Reports", blurb: "Recaps of the nights worth remembering, told by the people who remember them." },
-  { slug: "the-guide", name: "The Guide", blurb: "Where to go in Ann Arbor, ranked by vibe, line length and how loud it gets." },
-  { slug: "game-day", name: "Game Day", blurb: "Tailgates, watch parties and getting from the first beer to the final whistle." },
-  { slug: "pregame", name: "Pregame", blurb: "Playlists, fits, cheap eats and the hour before you leave." },
-  { slug: "lore", name: "Lore", blurb: "Legends, disasters and stories you can tell your kids, minus the names." },
-  { slug: "survival", name: "Survival", blurb: "Getting home, spending less and waking up fine." },
 ] as const;
 
 export type SectionSlug = (typeof SECTIONS)[number]["slug"];

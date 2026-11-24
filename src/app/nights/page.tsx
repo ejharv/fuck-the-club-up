@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { cf } from "@/lib/env";
 import { formatDay } from "@/lib/format";
 import { phaseOf, type Night } from "@/lib/nights";
-import { currentMember } from "@/lib/session";
+import { isAnyHost } from "@/lib/hosting";
+import { currentMember, signedInEmail } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Nights", robots: { index: false } };
@@ -11,30 +12,36 @@ export const metadata = { title: "Nights", robots: { index: false } };
 const phaseLabel = { invite: "Invite out", live: "Live: collecting", after: "Ready to review", dropped: "Dropped" } as const;
 
 export default async function NightsPage() {
+  const email = await signedInEmail();
+  if (!email) redirect("/login?next=/nights");
   const me = await currentMember();
-  if (!me) redirect("/login?next=/nights");
-  if (me.role !== "admin") redirect("/");
+  const isAdmin = me?.role === "admin";
+  if (!isAdmin && !(await isAnyHost(email))) redirect("/");
   const env = await cf();
   const { results } = await env.DB.prepare(
     `SELECT n.*, (SELECT COUNT(*) FROM night_uploads u WHERE u.night_id = n.id AND u.uploaded = 1) AS files,
             (SELECT COUNT(*) FROM night_accounts a WHERE a.night_id = n.id) AS accounts,
-            (SELECT COUNT(*) FROM night_rsvps r WHERE r.night_id = n.id AND r.answer = 'going') AS going
-       FROM nights n ORDER BY n.night_of DESC, n.created_at DESC`,
-  ).all<Night & { files: number; accounts: number; going: number }>();
+            (SELECT COALESCE(SUM(1 + r.plus_ones), 0) FROM night_rsvps r WHERE r.night_id = n.id AND r.answer = 'going' AND r.waitlisted = 0) AS going
+       FROM nights n
+      WHERE ?1 = 1 OR EXISTS (SELECT 1 FROM night_hosts h WHERE h.night_id = n.id AND h.email = ?2)
+      ORDER BY n.night_of DESC, n.created_at DESC`,
+  )
+    .bind(isAdmin ? 1 : 0, email)
+    .all<Night & { files: number; accounts: number; going: number }>();
 
   return (
     <section className="mx-auto max-w-4xl px-4 pt-12 sm:px-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <h1 className="display text-[clamp(3rem,9vw,5.5rem)]">Nights</h1>
-        <Link href="/nights/new" className="inline-flex min-h-12 items-center rounded-full bg-maize px-6 font-bold text-night hover:bg-ink">
+        {isAdmin && <Link href="/nights/new" className="inline-flex min-h-12 items-center rounded-full bg-maize px-6 font-bold text-night hover:bg-ink">
           New night
-        </Link>
+        </Link>}
       </div>
-      <nav aria-label="Admin" className="mono mt-4 flex flex-wrap gap-x-2 text-maize">
+      {isAdmin && <nav aria-label="Admin" className="mono mt-4 flex flex-wrap gap-x-2 text-maize">
         <Link href="/crew" className="-ml-2 inline-flex min-h-11 items-center px-2 underline underline-offset-4">Crew and invites</Link>
         <Link href="/site" className="inline-flex min-h-11 items-center px-2 underline underline-offset-4">Edit site</Link>
         <Link href="/takedowns" className="inline-flex min-h-11 items-center px-2 underline underline-offset-4">Takedowns</Link>
-      </nav>
+      </nav>}
       <p className="mt-2 max-w-xl text-dim">
         Each night gets one link: an invite before, a photo drop and everyone&apos;s story during and after, then the post.
       </p>

@@ -1,10 +1,13 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Markdown } from "@/components/Markdown";
+import { decryptText } from "@/lib/crypto";
+import { mediaUrl } from "@/lib/media-url";
 import { cf } from "@/lib/env";
 import { formatDay } from "@/lib/format";
 import { getNight, latestDraft, parseVenues, phaseOf } from "@/lib/nights";
-import { currentMember } from "@/lib/session";
+import { nightRole } from "@/lib/hosting";
+import { signedInEmail } from "@/lib/session";
 import { LIMITS } from "@/lib/synthesis";
 import { NightAdmin } from "./NightAdmin";
 
@@ -18,17 +21,19 @@ export default async function NightAdminPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ link?: string }>;
 }) {
-  const me = await currentMember();
   const { id } = await params;
-  if (!me) redirect(`/login?next=/nights/${id}`);
-  if (me.role !== "admin") redirect("/");
+  if (!(await signedInEmail())) redirect(`/login?next=/nights/${id}`);
+  const access = await nightRole(id);
+  if (!access) redirect("/");
   const night = await getNight(id);
   if (!night) notFound();
-  const { link } = await searchParams;
+  await searchParams;
+  const tokenRow = await (await cf()).DB.prepare("SELECT token_enc FROM nights WHERE id = ?").bind(id).first<{ token_enc: string | null }>();
+  const link = await decryptText((await cf()).AUTH_SECRET, tokenRow?.token_enc ?? null);
   const env = await cf();
   const DB = env.DB;
 
-  const [uploads, accounts, rsvps, draft, post] = await Promise.all([
+  const [uploads, accounts, rsvps, draft, post, hosts] = await Promise.all([
     DB.prepare(
       "SELECT r2_key, kind, nickname, decision, caption, is_cover, size FROM night_uploads WHERE night_id = ? AND uploaded = 1 ORDER BY created_at",
     )
@@ -37,9 +42,12 @@ export default async function NightAdminPage({
     DB.prepare("SELECT device_id, nickname, body, updated_at FROM night_accounts WHERE night_id = ? ORDER BY updated_at")
       .bind(id)
       .all<{ device_id: string; nickname: string; body: string; updated_at: string }>(),
-    DB.prepare("SELECT nickname, answer FROM night_rsvps WHERE night_id = ? ORDER BY updated_at").bind(id).all<{ nickname: string; answer: string }>(),
+    DB.prepare("SELECT device_id, nickname, answer, plus_ones, waitlisted FROM night_rsvps WHERE night_id = ? ORDER BY created_at")
+      .bind(id)
+      .all<{ device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number }>(),
     latestDraft(id),
     night.post_id ? DB.prepare("SELECT slug FROM posts WHERE id = ?").bind(night.post_id).first<{ slug: string }>() : null,
+    DB.prepare("SELECT email FROM night_hosts WHERE night_id = ? ORDER BY created_at").bind(id).all<{ email: string }>(),
   ]);
 
   let review = { approvals: 0, notes: [] as Array<{ nickname: string | null; body: string }> };
@@ -84,10 +92,24 @@ export default async function NightAdminPage({
           maxGenerations: LIMITS.generationsPerNight,
           hasPost: Boolean(night.post_id),
         }}
+        invite={{
+          name: night.name,
+          opensAt: night.opens_at,
+          closesAt: night.closes_at,
+          location: night.location_text ?? "",
+          dressCode: night.dress_code ?? "",
+          details: night.invite_details ?? "",
+          rules: night.invite_rules ?? "",
+          mediaUrl: night.invite_media_key ? mediaUrl(night.invite_media_key, env.MEDIA_PUBLIC_URL) : null,
+          mediaKind: night.invite_media_kind,
+        }}
         freshLink={link ?? null}
         uploads={uploads.results.map((u) => ({ ...u, src: `/api/nights/${id}/file/${u.r2_key}` }))}
         accounts={accounts.results}
         rsvps={rsvps.results}
+        guestLimits={{ capacity: night.capacity, maxPlusOnes: night.max_plus_ones }}
+        isAdmin={access.role === "admin"}
+        hosts={hosts.results.map((h) => h.email)}
         draft={draft}
         draftBody={draft ? <Markdown>{draft.body}</Markdown> : null}
         review={review}

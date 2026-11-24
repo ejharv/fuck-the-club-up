@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { signInWithGoogle } from "@/app/actions";
 import { safePath } from "@/lib/safe-path";
-import { currentMember } from "@/lib/session";
+import { isAnyHost } from "@/lib/hosting";
+import { currentMember, signedInEmail } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Crew sign in", robots: { index: false } };
@@ -15,6 +16,7 @@ const messages: Record<string, string> = {
 export default async function Login({ searchParams }: { searchParams: Promise<{ error?: string; next?: string }> }) {
   const { error, next } = await searchParams;
   if (await currentMember()) redirect(safePath(next));
+  if (await isAnyHost(await signedInEmail())) redirect(safePath(next, "/nights"));
   const message = error ? (messages[error] ?? "Sign-in didn't go through. Try again.") : null;
 
   return (

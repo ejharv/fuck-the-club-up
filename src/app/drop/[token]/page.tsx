@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Markdown } from "@/components/Markdown";
 import { dropContext } from "@/lib/drop-context";
 import { nightByToken } from "@/lib/nights";
+import { mediaUrl } from "@/lib/media-url";
 import { requestOrigin } from "@/lib/origin";
 import { formatDay } from "@/lib/format";
 import { latestDraft, listAlbum, phaseOf } from "@/lib/nights";
@@ -46,9 +47,9 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   const DB = env.DB;
 
   const [rsvps, mine, album, draft, accountCount, post] = await Promise.all([
-    DB.prepare("SELECT device_id, nickname, answer FROM night_rsvps WHERE night_id = ? ORDER BY updated_at")
+    DB.prepare("SELECT device_id, nickname, answer, plus_ones, waitlisted FROM night_rsvps WHERE night_id = ? ORDER BY created_at")
       .bind(night.id)
-      .all<{ device_id: string; nickname: string; answer: string }>(),
+      .all<{ device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number }>(),
     device
       ? DB.prepare("SELECT nickname, body FROM night_accounts WHERE night_id = ? AND device_id = ?")
           .bind(night.id, device)
@@ -75,8 +76,11 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   }
 
   const myRsvp = rsvps.results.find((r) => r.device_id === device) ?? null;
-  const going = rsvps.results.filter((r) => r.answer === "going").map((r) => r.nickname);
+  const going = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).map((r) => (r.plus_ones ? `${r.nickname} +${r.plus_ones}` : r.nickname));
   const maybe = rsvps.results.filter((r) => r.answer === "maybe").map((r) => r.nickname);
+  const headcount = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).reduce((n, r) => n + 1 + r.plus_ones, 0);
+  const waitlistCount = rsvps.results.filter((r) => r.answer === "going" && r.waitlisted).length;
+  const spotsLeft = night.capacity === null ? null : Math.max(0, night.capacity - headcount);
 
   const lede =
     phase === "invite"
@@ -93,7 +97,8 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         phase={phase}
         verified={verified}
         siteKey={env.TURNSTILE_SITE_KEY}
-        rsvp={myRsvp ? { nickname: myRsvp.nickname, answer: myRsvp.answer } : null}
+        rsvp={myRsvp ? { nickname: myRsvp.nickname, answer: myRsvp.answer, plusOnes: myRsvp.plus_ones, waitlisted: Boolean(myRsvp.waitlisted) } : null}
+        guestInfo={{ maxPlusOnes: night.max_plus_ones, spotsLeft, waitlist: waitlistCount }}
         account={mine ?? null}
         accountCount={accountCount?.n ?? 0}
         album={album.map((u) => ({ key: u.r2_key, kind: u.kind, nickname: u.nickname }))}
@@ -120,6 +125,16 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         {phase === "invite" ? "You're invited" : phase === "live" ? "It's happening" : phase === "after" ? "The morning after" : "It dropped"}
       </p>
       <h1 className="display mt-3 break-words text-[clamp(2.5rem,11vw,6rem)]">{night.name}</h1>
+      {night.invite_media_key && phase !== "dropped" && (
+        <div className="mt-6 overflow-hidden rounded-md border border-line bg-black">
+          {night.invite_media_kind === "video" ? (
+            <video src={mediaUrl(night.invite_media_key, env.MEDIA_PUBLIC_URL)} autoPlay muted loop playsInline controls preload="metadata" className="max-h-[70vh] w-full" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mediaUrl(night.invite_media_key, env.MEDIA_PUBLIC_URL)} alt="" className="max-h-[70vh] w-full object-contain" />
+          )}
+        </div>
+      )}
       <p className="mt-4 text-lg leading-snug">{lede}</p>
 
       {phase === "invite" && (
@@ -165,7 +180,10 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
       {phase === "invite" && (
         <section className="mt-10 space-y-6">
           <div>
-            <h2 className="mono text-maize">Who&apos;s coming</h2>
+            <h2 className="mono text-maize">
+              Who&apos;s coming{headcount ? ` (${headcount})` : ""}
+              {spotsLeft !== null && <span className="text-dim"> · {spotsLeft ? `${spotsLeft} ${spotsLeft === 1 ? "spot" : "spots"} left` : `full${waitlistCount ? `, ${waitlistCount} waitlisted` : ""}`}</span>}
+            </h2>
             <p className="mt-2 text-lg">
               {going.length ? going.join(", ") : "Nobody yet. Be the first."}
               {maybe.length ? <span className="text-dim"> (maybe: {maybe.join(", ")})</span> : null}
@@ -175,6 +193,16 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
             <div>
               <h2 className="mono text-maize">The plan</h2>
               <p className="mt-2 whitespace-pre-line text-lg">{night.invite_details}</p>
+            </div>
+          )}
+          {night.invite_rules && (
+            <div>
+              <h2 className="mono text-maize">Party rules</h2>
+              <ol className="mt-2 space-y-1 text-lg">
+                {night.invite_rules.split("\n").map((rule, i) => (
+                  <li key={i} className="flex gap-3"><span className="display text-pink">{i + 1}</span><span>{rule}</span></li>
+                ))}
+              </ol>
             </div>
           )}
           <a

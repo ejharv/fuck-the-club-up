@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { postSongs, postVenues } from "@/lib/collections";
 import { getPost } from "@/lib/db";
+import { songsToLines } from "@/lib/tracks";
 import { cf } from "@/lib/env";
 import { mediaUrl } from "@/lib/media-url";
 import { todayInDetroit } from "@/lib/post-fields";
@@ -27,6 +29,8 @@ export default async function EditPost({ params }: { params: Promise<{ slug: str
       </p>
       <h1 className="display mt-1 text-[clamp(2.5rem,8vw,4.5rem)]">Edit post</h1>
       <EditPostForm
+        venues={(await postVenues(post.id)).map((v) => ({ name: v.name, url: v.url ?? "", kind: v.kind }))}
+        songsText={songsToLines((await postSongs(post.id)).filter((t) => t.source === "mentioned"))}
         today={todayInDetroit()}
         post={{
           id: post.id,

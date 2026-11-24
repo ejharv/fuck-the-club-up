@@ -48,6 +48,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth(async () => {
 
         const member = await env.DB.prepare("SELECT email FROM members WHERE email = ?").bind(email).first();
         if (!member) {
+          // Co-hosts of a night can sign in to run it, even if they're not crew.
+          const host = await env.DB.prepare("SELECT 1 FROM night_hosts WHERE email = ? LIMIT 1").bind(email).first();
+          if (host) return true;
           const joinToken = (await cookies()).get(JOIN_COOKIE)?.value;
           const invite = joinToken ? await liveInvite(env.DB, joinToken) : null;
           if (invite && inviteFits(invite, email)) return true;

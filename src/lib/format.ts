@@ -1,4 +1,4 @@
-/** A timestamp, shown as its date in Ann Arbor. */
+/** A timestamp, shown as its date in Michigan time (America/Detroit). */
 export function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-US", {
     month: "short",

@@ -9,8 +9,8 @@ export function NewNightForm() {
     <form action={action} className="mt-8 space-y-6">
       <div>
         <label htmlFor="name" className="mb-2 block font-bold">Name</label>
-        <input id="name" name="name" required maxLength={100} autoComplete="off" enterKeyHint="next" className="field text-xl" placeholder="Birthday Boy turns 27" />
-        <p className="mt-1 text-sm text-dim">Shows on the invite. Use a nickname, not a real name.</p>
+        <input id="name" name="name" required maxLength={100} autoComplete="off" enterKeyHint="next" className="field text-xl" placeholder="Halloween at the house" />
+        <p className="mt-1 text-sm text-dim">Name the night, not the people. Guests add their own name or nickname when they RSVP.</p>
       </div>
       <fieldset className="min-w-0 grid gap-4 rounded-md border border-line p-4 sm:grid-cols-2">
         <legend className="mono px-2 text-maize">When</legend>
@@ -33,6 +33,26 @@ export function NewNightForm() {
         <label htmlFor="dressCode" className="mb-2 block font-bold">Dress code (optional)</label>
         <input id="dressCode" name="dressCode" maxLength={100} autoComplete="off" enterKeyHint="next" className="field" placeholder="All black, no exceptions" />
       </div>
+      <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4">
+        <legend className="mono px-2 text-maize">Guest list</legend>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="capacity" className="mb-2 block font-bold">Guest limit</label>
+            <input id="capacity" name="capacity" type="number" inputMode="numeric" min={1} max={5000} className="field" placeholder="No limit" />
+          </div>
+          <div>
+            <label htmlFor="plusOnes" className="mb-2 block font-bold">+1s per guest</label>
+            <select id="plusOnes" name="plusOnes" defaultValue="1" className="field">
+              <option value="0">None</option>
+              <option value="1">Up to 1</option>
+              <option value="2">Up to 2</option>
+              <option value="3">Up to 3</option>
+              <option value="5">Up to 5</option>
+            </select>
+          </div>
+        </div>
+        <p className="mt-2 text-sm text-dim">The limit counts guests and their +1s. Once it&apos;s full, new RSVPs go on a waitlist and move up automatically when spots open. You can change both later.</p>
+      </fieldset>
       <div>
         <label htmlFor="details" className="mb-2 block font-bold">The invite (optional)</label>
         <textarea id="details" name="details" rows={4} maxLength={2000} className="field" placeholder="Pregame at 9, Rick's by 10:30, Pizza House after." />

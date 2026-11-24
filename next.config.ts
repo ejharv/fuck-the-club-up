@@ -39,6 +39,7 @@ const nextConfig: NextConfig = {
       { source: "/((?!media/|api/).*)", headers: securityHeaders },
       { source: "/drop/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }] },
       { source: "/nights/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }] },
+      { source: "/u/:path*", headers: [{ key: "Referrer-Policy", value: "no-referrer" }, { key: "X-Robots-Tag", value: "noindex, nofollow" }] },
     ];
   },
 };

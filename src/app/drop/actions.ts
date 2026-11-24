@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { dropContext, requireVerified } from "@/lib/drop-context";
 import { clean } from "@/lib/post-fields";
+import { promoteWaitlist, rsvpStatement } from "@/lib/guests";
 import { isReviewable, latestDraft, phaseOf } from "@/lib/nights";
 import { LIMITS } from "@/lib/synthesis";
 
-export type DropResult = { error: string } | { ok: true } | undefined;
+export type DropResult = { error: string } | { ok: true; waitlisted?: boolean } | undefined;
 
 async function ctxFor(token: string) {
   const ctx = await dropContext(String(token));
@@ -17,21 +18,24 @@ async function ctxFor(token: string) {
 
 const nick = (v: unknown) => clean(v, 40);
 
-export async function rsvp(token: string, nickname: string, answer: string): Promise<DropResult> {
+export async function rsvp(token: string, nickname: string, answer: string, plusOnes = 0): Promise<DropResult> {
   const ctx = await ctxFor(token);
   if ("error" in ctx) return ctx;
   if (phaseOf(ctx.night) !== "invite" && phaseOf(ctx.night) !== "live") return { error: "RSVPs are closed for this one." };
   const name = nick(nickname);
-  if (!name) return { error: "Add a nickname so the host knows who's coming." };
+  if (!name) return { error: "Add your name or a nickname so the host knows who's coming." };
   if (!["going", "maybe", "cant"].includes(answer)) return { error: "Pick going, maybe or can't." };
-  await ctx.env.DB.prepare(
-    `INSERT INTO night_rsvps (night_id, device_id, nickname, answer, updated_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (night_id, device_id) DO UPDATE SET nickname = excluded.nickname, answer = excluded.answer, updated_at = excluded.updated_at`,
-  )
-    .bind(ctx.night.id, ctx.device, name, answer, new Date().toISOString())
-    .run();
+  const plus = answer === "going" ? Math.trunc(Number(plusOnes) || 0) : 0;
+  if (plus < 0 || plus > ctx.night.max_plus_ones) {
+    return { error: ctx.night.max_plus_ones ? `You can bring up to ${ctx.night.max_plus_ones}.` : "This one's no +1s." };
+  }
+  await rsvpStatement(ctx.env.DB, ctx.night.id, ctx.device, name, answer, plus).run();
+  await promoteWaitlist(ctx.env.DB, ctx.night.id);
+  const mine = await ctx.env.DB.prepare("SELECT waitlisted FROM night_rsvps WHERE night_id = ? AND device_id = ?")
+    .bind(ctx.night.id, ctx.device)
+    .first<{ waitlisted: number }>();
   revalidatePath(`/drop/${token}`);
-  return { ok: true };
+  return { ok: true, waitlisted: Boolean(mine?.waitlisted) };
 }
 
 export async function saveAccount(token: string, nickname: string, body: string): Promise<DropResult> {

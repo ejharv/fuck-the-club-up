@@ -21,6 +21,7 @@ const eslintConfig = [
       "cloudflare-env.d.ts",
       ".open-next/**",
       ".wrangler/**",
+      ".claude/**",
     ],
   },
 ];

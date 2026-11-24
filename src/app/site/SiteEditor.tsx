@@ -104,18 +104,20 @@ export function SiteEditor({ content, defaults, sections }: Props) {
       </fieldset>
 
       <fieldset className="min-w-0 space-y-5 rounded-md border border-line p-4 sm:p-6">
-        <legend className="display px-2 text-2xl text-maize">Section blurbs</legend>
+        <legend className="display px-2 text-2xl text-maize">Tabs</legend>
         {sections.map((s) => (
           <Field
             key={s.slug}
             id={`blurb-${s.slug}`}
-            label={s.name}
+            label={`${s.name} intro`}
             value={c.sectionBlurbs[s.slug] ?? ""}
             def={defaults.sectionBlurbs[s.slug]}
             onChange={(v) => set("sectionBlurbs", { ...c.sectionBlurbs, [s.slug]: v })}
             max={200}
           />
         ))}
+        <Field id="playlistsIntro" label="Playlists intro" value={c.playlistsIntro} def={defaults.playlistsIntro} onChange={(v) => set("playlistsIntro", v)} rows={2} max={400} />
+        <Field id="placesIntro" label="Places intro" value={c.placesIntro} def={defaults.placesIntro} onChange={(v) => set("placesIntro", v)} rows={2} max={400} />
       </fieldset>
 
       <fieldset className="min-w-0 space-y-5 rounded-md border border-line p-4 sm:p-6">

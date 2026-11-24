@@ -4,7 +4,11 @@ import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { useEffect, useState, useTransition, type ReactNode } from "react";
 import type { Draft, NightStatus, Phase } from "@/lib/nights";
-import { HOUSE_RULES, SECTIONS } from "@/lib/sections";
+import { HOUSE_RULES } from "@/lib/sections";
+import { InviteEditor, type InviteData } from "@/components/InviteEditor";
+import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
+import { songsFromLines, songsToLines, type Song } from "@/lib/tracks";
+import type { Venue } from "@/lib/venues";
 import {
   addAdminNote,
   bulkDecision,
@@ -18,6 +22,10 @@ import {
   scheduleDrop,
   setAlbumOpen,
   setUploadWindow,
+  setGuestLimits,
+  addHost,
+  removeHost,
+  removeRsvp,
   setVenues,
   updateUpload,
   type AdminResult,
@@ -103,7 +111,7 @@ function StatusBar({ steps, next }: { steps: Step[]; next: string | null }) {
   );
 }
 
-function LinkPanel({ nightId, freshLink, night }: { nightId: string; freshLink: string | null; night: { phase: Phase; status: NightStatus; opensAt: string; closesAt: string; albumOpen: boolean } }) {
+function LinkPanel({ nightId, freshLink, night, invite }: { nightId: string; freshLink: string | null; night: { phase: Phase; status: NightStatus; opensAt: string; closesAt: string; albumOpen: boolean }; invite: InviteData }) {
   const [token, setToken] = useState(freshLink);
   const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -112,9 +120,8 @@ function LinkPanel({ nightId, freshLink, night }: { nightId: string; freshLink: 
   useEffect(() => {
     if (!url) return;
     QRCode.toDataURL(url, { margin: 1, width: 320, color: { dark: "#0c0d1c", light: "#f2eee4" } }).then(setQr);
-    // Drop the token from the address bar so it isn't left in history.
-    window.history.replaceState(null, "", `/nights/${nightId}`);
-  }, [url, nightId]);
+  }, [url]);
+  const canShare = typeof navigator !== "undefined" && "share" in navigator;
 
   const uploadsState = night.status === "collecting" ? (night.phase === "invite" ? "Invite out" : "Open") : night.status === "closed" ? "Closed" : "Done";
 
@@ -123,22 +130,37 @@ function LinkPanel({ nightId, freshLink, night }: { nightId: string; freshLink: 
       {url ? (
         <div className="grid gap-5 sm:grid-cols-[1fr_auto]">
           <div className="min-w-0">
-            <p className="text-dim">Copy it now. Only a fingerprint of it is stored, so this is the one time it&apos;s shown.</p>
-            <p className="mt-3 break-all rounded bg-night-2 p-3 font-mono text-sm">{url}</p>
-            <button
-              type="button"
-              onClick={async () => { await navigator.clipboard.writeText(url); setCopied(true); }}
-              className={`${btnMaize} mt-3 w-full sm:w-auto`}
-            >
-              {copied ? "Copied" : "Copy link"}
-            </button>
+            <p className="text-dim">Share it anywhere: group chats, stories, texts. Everyone who opens it adds their own name or nickname.</p>
+            <p suppressHydrationWarning className="mt-3 break-all rounded bg-night-2 p-3 font-mono text-sm">{url}</p>
+            <div className="mt-3 grid gap-2 sm:flex sm:gap-3">
+              <button
+                type="button"
+                onClick={async () => { await navigator.clipboard.writeText(url); setCopied(true); }}
+                className={`${btnMaize} w-full sm:w-auto`}
+              >
+                {copied ? "Copied" : "Copy link"}
+              </button>
+              {canShare && (
+                <button
+                  type="button"
+                  onClick={() => navigator.share({ title: "You're invited", url }).catch(() => {})}
+                  className={`${btnGhost} w-full sm:w-auto`}
+                >
+                  Share
+                </button>
+              )}
+            </div>
+            <p className="mt-3 text-sm text-dim">
+              Anyone with the link can also see this night&apos;s shared album. If the link goes really wide, hide the album below.
+            </p>
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {qr && <img src={qr} alt="QR code for the link" className="h-48 w-48 justify-self-center rounded sm:h-40 sm:w-40" />}
         </div>
       ) : (
-        <p className="text-dim">The link was shown when you created the night. Lost it? Make a new one; the old one stops working.</p>
+        <p className="text-dim">This night was made before links could be shown again. Make a new one below; the old one stops working.</p>
       )}
+      <InviteEditor nightId={nightId} invite={invite} />
       <dl className="mt-5 grid grid-cols-2 gap-3 rounded bg-night-2 p-3 text-sm sm:grid-cols-3">
         <div><dt className="mono text-maize">Party starts</dt><dd>{timeFmt(night.opensAt)}</dd></div>
         <div><dt className="mono text-maize">Photos close</dt><dd>{timeFmt(night.closesAt)}</dd></div>
@@ -173,7 +195,7 @@ function UploadsPanel({ nightId, uploads }: { nightId: string; uploads: Upload[]
   const tossed = uploads.filter((u) => u.decision === "toss").length;
   const undecided = uploads.length - kept - tossed;
   return (
-    <Panel id="photos" step={3} title="Photos and videos" meta={uploads.length ? `${kept} kept · ${tossed} tossed · ${undecided} to decide` : "None yet"}>
+    <Panel id="photos" step={4} title="Photos and videos" meta={uploads.length ? `${kept} kept · ${tossed} tossed · ${undecided} to decide` : "None yet"}>
       <p className="text-dim">Keep what goes in the post. Tossed files stay in the shared album; Delete removes a file everywhere.</p>
       {uploads.length > 0 && (
         <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:gap-3">
@@ -235,40 +257,141 @@ function UploadsPanel({ nightId, uploads }: { nightId: string; uploads: Upload[]
   );
 }
 
-function VenuesPanel({ nightId, venues }: { nightId: string; venues: Array<{ name: string; url: string }> }) {
-  const [rows, setRows] = useState(venues.length ? venues : [{ name: "", url: "" }]);
+function VenuesPanel({ nightId, venues }: { nightId: string; venues: Venue[] }) {
+  const [rows, setRows] = useState<VenueRow[]>(venues.length ? venues.map((v) => ({ name: v.name, url: v.url ?? "", kind: v.kind })) : [blankVenue()]);
   const { pending, error, run } = useRun();
   const [saved, setSaved] = useState(false);
-  const set = (i: number, k: "name" | "url", v: string) => { setSaved(false); setRows((r) => r.map((x, j) => (j === i ? { ...x, [k]: v } : x))); };
   const named = venues.filter((v) => v.name).length;
   return (
-    <Panel id="places" step={4} title="Places you went" meta={named ? `${named} saved` : "None saved"}>
-      <p className="text-dim">Name and website. When Claude mentions one, it links to that website. Those are the only links a draft can have.</p>
-      <ul className="mt-4 space-y-3">
-        {rows.map((v, i) => (
-          <li key={i} className="grid gap-2 rounded bg-night-2 p-3 sm:grid-cols-[14rem_1fr_auto] sm:items-center sm:bg-transparent sm:p-0">
-            <input value={v.name} onChange={(e) => set(i, "name", e.target.value)} maxLength={60} aria-label="Place name" placeholder="Rick's" autoComplete="off" enterKeyHint="next" className="field" />
-            <input
-              value={v.url}
-              onChange={(e) => set(i, "url", e.target.value)}
-              maxLength={300}
-              aria-label="Website"
-              placeholder="ricksamericancafe.com"
-              inputMode="url"
-              autoComplete="off"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              className="field"
-            />
-            <button type="button" onClick={() => setRows((r) => r.filter((_, j) => j !== i))} className={`${textBtn} justify-self-end`}>Remove</button>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-4 grid grid-cols-2 items-center gap-2 sm:flex sm:gap-3">
-        <button type="button" onClick={() => setRows((r) => [...r, { name: "", url: "" }])} className={btnGhost}>Add a place</button>
+    <Panel id="places" step={5} title="Places you went" meta={named ? `${named} saved` : "None saved"}>
+      <p className="text-dim">Name, website, and whether it was for partying or eating. Claude links names to these websites, and when the night drops they show up on the Places tab, linked back to this night.</p>
+      <div className="mt-4">
+        <VenuesEditor rows={rows} setRows={setRows} onChange={() => setSaved(false)} />
+      </div>
+      <div className="mt-4 flex items-center gap-3">
         <button type="button" disabled={pending} onClick={() => run(() => setVenues(nightId, rows), () => setSaved(true))} className={btnMaize}>{pending ? "Saving…" : "Save places"}</button>
-        {saved && <span role="status" className="col-span-2 text-maize">Saved.</span>}
+        {saved && <span role="status" className="text-maize">Saved.</span>}
+      </div>
+      <ErrorLine error={error} />
+    </Panel>
+  );
+}
+
+function HostsPanel({ nightId, hosts, isAdmin }: { nightId: string; hosts: string[]; isAdmin: boolean }) {
+  const { pending, error, run } = useRun();
+  const [email, setEmail] = useState("");
+  return (
+    <section aria-labelledby="hosts-h" className="mt-6 rounded-md border border-line p-4 sm:mt-8 sm:p-5">
+      <h2 id="hosts-h" className="display text-xl">Hosts</h2>
+      <p className="mt-1 text-sm text-dim">
+        Co-hosts can run this night: guest list, photos, places, draft and drop. They sign in with the Google email you add, no crew account needed.
+      </p>
+      {hosts.length > 0 && (
+        <ul className="mt-3 divide-y divide-line rounded border border-line">
+          {hosts.map((h) => (
+            <li key={h} className="flex min-h-12 items-center justify-between gap-3 px-3">
+              <span className="min-w-0 truncate">{h}</span>
+              {isAdmin && (
+                <button type="button" disabled={pending} onClick={() => confirm(`Remove ${h} as a host?`) && run(() => removeHost(nightId, h))} className={textBtn}>
+                  Remove
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {isAdmin && (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <label htmlFor="host-email" className="sr-only">Co-host&apos;s Google email</label>
+          <input
+            id="host-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="cohost@gmail.com"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            className="field sm:flex-1"
+          />
+          <button type="button" disabled={pending || !email} onClick={() => run(() => addHost(nightId, email), () => setEmail(""))} className={btnGhost}>
+            Add host
+          </button>
+        </div>
+      )}
+      {isAdmin && hosts.length > 0 && (
+        <p className="mt-2 text-sm text-dim">Send them this page&apos;s address; they sign in with Google and land here.</p>
+      )}
+      <ErrorLine error={error} />
+    </section>
+  );
+}
+
+type Rsvp = { device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number };
+
+function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[]; limits: { capacity: number | null; maxPlusOnes: number } }) {
+  const { pending, error, run } = useRun();
+  const [capacity, setCapacity] = useState(limits.capacity === null ? "" : String(limits.capacity));
+  const [plus, setPlus] = useState(String(limits.maxPlusOnes));
+  const going = rsvps.filter((g) => g.answer === "going" && !g.waitlisted);
+  const waitlist = rsvps.filter((g) => g.answer === "going" && g.waitlisted);
+  const maybe = rsvps.filter((g) => g.answer === "maybe");
+  const cant = rsvps.filter((g) => g.answer === "cant");
+  const headcount = going.reduce((n, g) => n + 1 + g.plus_ones, 0);
+  const groups: Array<[string, Rsvp[]]> = [
+    ["Going", going],
+    ["Waitlist", waitlist],
+    ["Maybe", maybe],
+    ["Can't make it", cant],
+  ];
+  return (
+    <Panel
+      id="guests"
+      step={2}
+      title="Guest list"
+      meta={`${headcount}${limits.capacity !== null ? ` of ${limits.capacity}` : ""} going${waitlist.length ? ` · ${waitlist.length} waitlisted` : ""}`}
+    >
+      <div className="grid grid-cols-2 gap-3 sm:flex sm:items-end">
+        <div>
+          <label htmlFor="g-cap" className="mb-1 block text-sm font-bold">Guest limit</label>
+          <input id="g-cap" value={capacity} onChange={(e) => setCapacity(e.target.value)} type="number" inputMode="numeric" min={1} max={5000} placeholder="No limit" className="field sm:w-32" />
+        </div>
+        <div>
+          <label htmlFor="g-plus" className="mb-1 block text-sm font-bold">+1s per guest</label>
+          <select id="g-plus" value={plus} onChange={(e) => setPlus(e.target.value)} className="field sm:w-36">
+            {[0, 1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n === 0 ? "None" : `Up to ${n}`}</option>)}
+          </select>
+        </div>
+        <button type="button" disabled={pending} onClick={() => run(() => setGuestLimits(nightId, capacity, plus))} className={`${btnGhost} col-span-2`}>
+          {pending ? "Saving…" : "Save limits"}
+        </button>
+      </div>
+      <p className="mt-2 text-sm text-dim">Raising the limit lets people in off the waitlist, oldest first.</p>
+      <div className="mt-5 space-y-5">
+        {groups.map(([label, list]) =>
+          list.length ? (
+            <div key={label}>
+              <p className="mono text-maize">{label} ({list.length})</p>
+              <ul className="mt-2 divide-y divide-line rounded border border-line">
+                {list.map((g) => (
+                  <li key={g.device_id} className="flex min-h-12 items-center justify-between gap-3 px-3">
+                    <span className="min-w-0 truncate">{g.nickname}{g.plus_ones ? <span className="text-dim"> +{g.plus_ones}</span> : null}</span>
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() => confirm(`Take ${g.nickname} off the guest list?`) && run(() => removeRsvp(nightId, g.device_id))}
+                      className={textBtn}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null,
+        )}
+        {!rsvps.length && <p className="text-dim">No RSVPs yet. Share the link.</p>}
       </div>
       <ErrorLine error={error} />
     </Panel>
@@ -279,7 +402,7 @@ function AccountsPanel({ nightId, accounts, rsvps }: { nightId: string; accounts
   const { pending, error, run } = useRun();
   const going = rsvps.filter((r) => r.answer === "going").map((r) => r.nickname);
   return (
-    <Panel id="accounts" step={2} title="Accounts" meta={`${accounts.length} written · ${going.length} going`}>
+    <Panel id="accounts" step={3} title="Accounts" meta={`${accounts.length} written · ${going.length} going`}>
       {rsvps.length > 0 && <p className="text-dim">RSVP&apos;d going: {going.join(", ") || "nobody yet"}.</p>}
       {accounts.length ? (
         <ul className="mt-4 space-y-3">
@@ -324,6 +447,14 @@ function DraftPanel({
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState("");
   const { pending, error, run } = useRun();
+  const draftSongs: Song[] = (() => {
+    try {
+      const v = JSON.parse(draft?.songs ?? "[]");
+      return Array.isArray(v) ? v : [];
+    } catch {
+      return [];
+    }
+  })();
 
   async function generate(rewrite: boolean) {
     setBusy(true);
@@ -346,6 +477,7 @@ function DraftPanel({
         damage: String(form.get("damage") ?? ""),
         rideHome: String(form.get("rideHome") ?? ""),
         body: String(form.get("body") ?? ""),
+        songs: songsFromLines(String(form.get("songs") ?? "")),
       }),
       () => setEditing(false),
     );
@@ -356,7 +488,7 @@ function DraftPanel({
   return (
     <Panel
       id="draft"
-      step={5}
+      step={6}
       title={draft ? `Draft, version ${draft.version}` : "The draft"}
       tone="maize"
       meta={draft ? `${review.approvals} of ${accountCount} approved · ${review.notes.length} ${review.notes.length === 1 ? "note" : "notes"}` : "Not written yet"}
@@ -407,6 +539,11 @@ function DraftPanel({
             <textarea id="draft-body" name="body" required rows={16} maxLength={60000} defaultValue={draft?.body ?? ""} className="field leading-relaxed" />
             <p className="mt-1 text-sm text-dim">Link a place with [Rick&apos;s](https://its-website.com). Saving makes a new version, and approvals start over.</p>
           </div>
+          <div>
+            <label htmlFor="draft-songs" className="mb-1 block text-sm font-bold">Songs of the night</label>
+            <textarea id="draft-songs" name="songs" rows={5} defaultValue={songsToLines(draftSongs)} placeholder={"The Killers - Mr. Brightside\nDancing Queen"} className="field font-mono text-sm leading-relaxed" />
+            <p className="mt-1 text-sm text-dim">One per line, &quot;Artist - Title&quot; or just the title. They go on the post and the Playlists tab.</p>
+          </div>
           <div className="sticky bottom-0 -mx-4 border-t border-line bg-night/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
             <button disabled={pending} className={`${btnMaize} w-full sm:w-auto`}>{pending ? "Saving…" : "Save as new version"}</button>
           </div>
@@ -417,6 +554,14 @@ function DraftPanel({
           {draft.dek && <p className="mt-3 text-xl">{draft.dek}</p>}
           <p className="mono mt-4 text-maize">{[draft.night_label, draft.damage, draft.ride_home].filter(Boolean).join(" · ")}</p>
           <div className="mt-6">{body}</div>
+          {draftSongs.length > 0 && (
+            <div className="mt-6 border-t border-line pt-4">
+              <p className="mono text-maize">Songs of the night ({draftSongs.length})</p>
+              <ol className="mt-2 space-y-1 text-sm">
+                {draftSongs.map((t, i) => <li key={i}><strong>{t.title}</strong>{t.artist ? <span className="text-dim"> · {t.artist}</span> : null}</li>)}
+              </ol>
+            </div>
+          )}
         </div>
       ) : null}
 
@@ -457,13 +602,12 @@ function DraftPanel({
 }
 
 function PublishPanel({ nightId, draft, status, dropAt, kept, approvals, accountCount }: { nightId: string; draft: Draft; status: NightStatus; dropAt: string | null; kept: number; approvals: number; accountCount: number }) {
-  const [section, setSection] = useState("night-reports");
   const [when, setWhen] = useState("");
   const { pending, error, run } = useRun();
   const fields = (form: FormData) => ({
     title: draft.title,
     dek: draft.dek ?? "",
-    section: String(form.get("section") ?? ""),
+    section: "night-reports",
     night: draft.night_label ?? "",
     damage: draft.damage ?? "",
     rideHome: draft.ride_home ?? "",
@@ -475,7 +619,7 @@ function PublishPanel({ nightId, draft, status, dropAt, kept, approvals, account
   return (
     <Panel
       id="drop"
-      step={6}
+      step={7}
       title="Drop it"
       tone="maize"
       meta={status === "reviewing" && dropAt ? `Scheduled ${timeFmt(dropAt)}` : `Version ${draft.version} · ${kept} ${kept === 1 ? "file" : "files"} · ${allApproved ? "all approved" : `${approvals} of ${accountCount} approved`}`}
@@ -498,12 +642,6 @@ function PublishPanel({ nightId, draft, status, dropAt, kept, approvals, account
           {!allApproved && (
             <p className="rounded-md border border-pink/60 bg-pink/10 p-3 text-sm">Only {approvals} of {accountCount} people have approved this version.</p>
           )}
-          <div>
-            <label htmlFor="drop-section" className="mb-2 block font-bold">Section</label>
-            <select id="drop-section" name="section" value={section} onChange={(e) => setSection(e.target.value)} className="field sm:w-72">
-              {SECTIONS.map((s) => <option key={s.slug} value={s.slug}>{s.name}</option>)}
-            </select>
-          </div>
           <label className="flex cursor-pointer gap-3 rounded-md border border-line bg-night-2 p-4">
             <input type="checkbox" name="consent" value="yes" required className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />
             <span><strong>{HOUSE_RULES[0].title}</strong> Everyone named or shown in the post and the kept files said yes.</span>
@@ -527,14 +665,18 @@ function PublishPanel({ nightId, draft, status, dropAt, kept, approvals, account
 
 export function NightAdmin(props: {
   night: { id: string; status: NightStatus; phase: Phase; opensAt: string; closesAt: string; albumOpen: boolean; dropAt: string | null; generations: number; maxGenerations: number; hasPost: boolean };
+  invite: InviteData;
   freshLink: string | null;
   uploads: Upload[];
   accounts: Array<{ device_id: string; nickname: string; body: string }>;
-  rsvps: Array<{ nickname: string; answer: string }>;
+  rsvps: Rsvp[];
+  guestLimits: { capacity: number | null; maxPlusOnes: number };
+  isAdmin: boolean;
+  hosts: string[];
   draft: Draft | null;
   draftBody: ReactNode;
   review: { approvals: number; notes: Array<{ nickname: string | null; body: string }> };
-  venues: Array<{ name: string; url: string }>;
+  venues: Venue[];
 }) {
   const { night } = props;
   const dropped = night.status === "dropped" || (night.status === "dropping" && night.hasPost);
@@ -545,17 +687,19 @@ export function NightAdmin(props: {
   const undecided = props.uploads.filter((u) => u.decision !== "keep" && u.decision !== "toss").length;
   const accountCount = props.accounts.length;
   const approvals = props.review.approvals;
+  const guestHeadcount = props.rsvps.filter((g) => g.answer === "going" && !g.waitlisted).reduce((n, g) => n + 1 + g.plus_ones, 0);
   const steps: Step[] = [
     ...(!dropped ? [{ id: "link", n: 1, label: "Link", done: night.phase !== "invite" && night.phase !== "live" }] : []),
-    { id: "accounts", n: 2, label: "Accounts", value: String(accountCount), done: accountCount > 0 },
-    { id: "photos", n: 3, label: "Photos", value: props.uploads.length ? `${kept}/${props.uploads.length}` : "0", done: props.uploads.length > 0 && undecided === 0 },
+    { id: "guests", n: 2, label: "Guests", value: String(guestHeadcount), done: guestHeadcount > 0 },
+    { id: "accounts", n: 3, label: "Accounts", value: String(accountCount), done: accountCount > 0 },
+    { id: "photos", n: 4, label: "Photos", value: props.uploads.length ? `${kept}/${props.uploads.length}` : "0", done: props.uploads.length > 0 && undecided === 0 },
     ...(!dropped
       ? [
-          { id: "places", n: 4, label: "Places", value: String(props.venues.filter((v) => v.name).length), done: props.venues.some((v) => v.name) },
-          { id: "draft", n: 5, label: "Draft", value: props.draft ? `v${props.draft.version} · ${approvals}/${accountCount} ok` : undefined, done: !!props.draft && accountCount > 0 && approvals >= accountCount },
+          { id: "places", n: 5, label: "Places", value: String(props.venues.filter((v) => v.name).length), done: props.venues.some((v) => v.name) },
+          { id: "draft", n: 6, label: "Draft", value: props.draft ? `v${props.draft.version} · ${approvals}/${accountCount} ok` : undefined, done: !!props.draft && accountCount > 0 && approvals >= accountCount },
         ]
       : []),
-    ...(!dropped && props.draft ? [{ id: "drop", n: 6, label: night.status === "reviewing" ? "Scheduled" : "Drop" }] : []),
+    ...(!dropped && props.draft ? [{ id: "drop", n: 7, label: night.status === "reviewing" ? "Scheduled" : "Drop" }] : []),
   ];
   // The one step that needs attention next.
   const next = dropped
@@ -589,7 +733,9 @@ export function NightAdmin(props: {
           The last drop stopped partway. Use <strong>Drop now</strong> below to finish it; files already copied won&apos;t be copied twice. The cron will also retry within 15 minutes.
         </p>
       )}
-      {!dropped && <LinkPanel nightId={night.id} freshLink={props.freshLink} night={night} />}
+      {!dropped && <LinkPanel nightId={night.id} freshLink={props.freshLink} night={night} invite={props.invite} />}
+      <HostsPanel nightId={night.id} hosts={props.hosts} isAdmin={props.isAdmin} />
+      {!dropped && <GuestsPanel nightId={night.id} rsvps={props.rsvps} limits={props.guestLimits} />}
       <AccountsPanel nightId={night.id} accounts={props.accounts} rsvps={props.rsvps} />
       <UploadsPanel nightId={night.id} uploads={props.uploads} />
       {!dropped && <VenuesPanel nightId={night.id} venues={props.venues} />}
@@ -615,16 +761,18 @@ export function NightAdmin(props: {
           accountCount={accountCount}
         />
       )}
-      <div className="mt-12 border-t border-line pt-4">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => confirm("Delete this night, its album and everyone's accounts? A dropped post stays up.") && run(() => deleteNight(night.id))}
-          className={`${textBtn} -ml-2`}
-        >
-          Delete this night and its album
-        </button>
-      </div>
+      {props.isAdmin && (
+        <div className="mt-12 border-t border-line pt-4">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => confirm("Delete this night, its album and everyone's accounts? A dropped post stays up.") && run(() => deleteNight(night.id))}
+            className={`${textBtn} -ml-2`}
+          >
+            Delete this night and its album
+          </button>
+        </div>
+      )}
     </>
   );
 }

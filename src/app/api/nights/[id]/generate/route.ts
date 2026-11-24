@@ -3,7 +3,7 @@ import { BedrockError } from "@/lib/bedrock";
 import { cf } from "@/lib/env";
 import { getNight, latestDraft, parseVenues } from "@/lib/nights";
 import { LIMITS, buildPrompt, sanitizeDraftBody, writeDraft } from "@/lib/synthesis";
-import { currentMember } from "@/lib/session";
+import { nightRole } from "@/lib/hosting";
 
 /**
  * Admin asks Claude for a draft (or a rewrite using the notes on the latest
@@ -11,9 +11,8 @@ import { currentMember } from "@/lib/session";
  * on the night stops double clicks from paying twice.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const member = await currentMember();
-  if (member?.role !== "admin") return NextResponse.json({ error: "Admins only." }, { status: 403 });
   const id = (await params).id;
+  if (!(await nightRole(id))) return NextResponse.json({ error: "Only admins and this night's hosts can do that." }, { status: 403 });
   const env = await cf();
   const night = await getNight(id);
   if (!night) return NextResponse.json({ error: "That night doesn't exist." }, { status: 404 });
@@ -53,13 +52,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const prompt = buildPrompt({ nightName: night.name, nightOf: night.night_of, accounts, venues, previous, notes });
     const out = await writeDraft(env, prompt);
-    const body = sanitizeDraftBody(out.body, new Set(venues.map((v) => v.url)));
+    const body = sanitizeDraftBody(out.body, new Set(venues.map((v) => v.url).filter((u): u is string => Boolean(u))));
     const version = (previous?.version ?? (await latestDraft(id))?.version ?? 0) + 1;
     await env.DB.prepare(
-      `INSERT INTO night_drafts (night_id, version, title, dek, night_label, damage, ride_home, body, source, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'claude', ?)`,
+      `INSERT INTO night_drafts (night_id, version, title, dek, night_label, damage, ride_home, body, songs, source, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'claude', ?)`,
     )
-      .bind(id, version, out.title, out.dek, out.night_label, out.damage, out.ride_home, body, new Date().toISOString())
+      .bind(id, version, out.title, out.dek, out.night_label, out.damage, out.ride_home, body, JSON.stringify(out.songs), new Date().toISOString())
       .run();
     succeeded = true;
     return NextResponse.json({ version });

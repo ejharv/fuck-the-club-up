@@ -2,11 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { randomToken, sha256Hex } from "@/lib/crypto";
+import { encryptText, randomToken, sha256Hex } from "@/lib/crypto";
+import { MAX_PLUS_ONES_LIMIT, promoteWaitlist } from "@/lib/guests";
 import { runDrop, type DropFields } from "@/lib/drop";
 import { cf } from "@/lib/env";
 import { defaultClosesAt, getNight, isStuckDrop, latestDraft } from "@/lib/nights";
 import { clean, validatePostFields, type PostFieldsInput } from "@/lib/post-fields";
+import { cleanSongs, type Song } from "@/lib/tracks";
+import { cleanVenues, parseVenueJson } from "@/lib/venues";
+import { requireNightAccess } from "@/lib/hosting";
 import { NotAllowed, requireAdmin } from "@/lib/session";
 
 export type AdminResult = { error: string } | { ok: true; token?: string } | undefined;
@@ -16,7 +20,7 @@ const fail = (e: unknown): AdminResult => {
   throw e;
 };
 
-/** Parses a datetime-local value as Ann Arbor time. */
+/** Parses a datetime-local value as Michigan time (America/Detroit). */
 function detroitToIso(local: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(local)) return null;
   const [d, t] = local.split("T");
@@ -30,6 +34,16 @@ function detroitToIso(local: string): string | null {
     if (back === local) return guess.toISOString();
   }
   return null;
+}
+
+/** Guest cap (blank = no limit) and +1s per guest. */
+function guestLimits(capacityRaw: unknown, plusRaw: unknown): { capacity: number | null; maxPlusOnes: number } | { error: string } {
+  const c = String(capacityRaw ?? "").trim();
+  const capacity = c ? Math.trunc(Number(c)) : null;
+  if (capacity !== null && (!Number.isFinite(capacity) || capacity < 1 || capacity > 5000)) return { error: "The guest limit has to be between 1 and 5000, or blank for no limit." };
+  const maxPlusOnes = Math.trunc(Number(plusRaw ?? 0) || 0);
+  if (maxPlusOnes < 0 || maxPlusOnes > MAX_PLUS_ONES_LIMIT) return { error: `+1s can be 0 to ${MAX_PLUS_ONES_LIMIT}.` };
+  return { capacity, maxPlusOnes };
 }
 
 export async function createNight(_prev: AdminResult, form: FormData): Promise<AdminResult> {
@@ -48,23 +62,34 @@ export async function createNight(_prev: AdminResult, form: FormData): Promise<A
     if (new Date(closesAt) <= new Date()) closesAt = new Date(Date.now() + 7 * 864e5).toISOString(); // past nights: a week to collect
     if (new Date(closesAt) <= new Date(opensAt)) return { error: "The link has to close after the party starts." };
 
+    const limits = guestLimits(form.get("capacity"), form.get("plusOnes"));
+    if ("error" in limits) return limits;
     const token = randomToken();
     const id = crypto.randomUUID();
     await env.DB.prepare(
-      `INSERT INTO nights (id, name, night_of, token_hash, opens_at, closes_at, invite_details, location_text, dress_code, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO nights (id, name, night_of, token_hash, token_enc, capacity, max_plus_ones, opens_at, closes_at, invite_details, location_text, dress_code, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
-      .bind(id, name, nightOf, await sha256Hex(token), opensAt, closesAt, clean(form.get("details"), 2000),
+      .bind(id, name, nightOf, await sha256Hex(token), await encryptText(env.AUTH_SECRET, token), limits.capacity, limits.maxPlusOnes, opensAt, closesAt, clean(form.get("details"), 2000),
         clean(form.get("location"), 200), clean(form.get("dressCode"), 100), admin.email, new Date().toISOString())
       .run();
-    redirect(`/nights/${id}?link=${encodeURIComponent(token)}`);
+    redirect(`/nights/${id}`);
   } catch (e) {
     if (e && typeof e === "object" && "digest" in e && String((e as { digest: string }).digest).startsWith("NEXT_REDIRECT")) throw e;
     return fail(e);
   }
 }
 
+/** Admins, or this night's co-hosts. */
 async function adminNight(nightId: string) {
+  const access = await requireNightAccess(String(nightId));
+  const night = await getNight(String(nightId));
+  if (!night) throw new NotAllowed("That night doesn't exist.");
+  return { env: await cf(), night, access };
+}
+
+/** Admins only (creating nights, managing hosts, deleting). */
+async function ownerNight(nightId: string) {
   await requireAdmin();
   const night = await getNight(String(nightId));
   if (!night) throw new NotAllowed("That night doesn't exist.");
@@ -75,7 +100,9 @@ export async function regenerateLink(nightId: string): Promise<AdminResult> {
   try {
     const { env, night } = await adminNight(nightId);
     const token = randomToken();
-    await env.DB.prepare("UPDATE nights SET token_hash = ? WHERE id = ?").bind(await sha256Hex(token), night.id).run();
+    await env.DB.prepare("UPDATE nights SET token_hash = ?, token_enc = ? WHERE id = ?")
+      .bind(await sha256Hex(token), await encryptText(env.AUTH_SECRET, token), night.id)
+      .run();
     revalidatePath(`/nights/${night.id}`);
     return { ok: true, token };
   } catch (e) {
@@ -179,7 +206,7 @@ export async function removeAccount(nightId: string, deviceId: string): Promise<
   }
 }
 
-export type DraftEdit = { title: string; dek: string; nightLabel: string; damage: string; rideHome: string; body: string };
+export type DraftEdit = { title: string; dek: string; nightLabel: string; damage: string; rideHome: string; body: string; songs?: Song[] };
 
 /** Saving an edit makes a new version, which resets approvals. */
 export async function saveDraftEdit(nightId: string, d: DraftEdit): Promise<AdminResult> {
@@ -190,10 +217,12 @@ export async function saveDraftEdit(nightId: string, d: DraftEdit): Promise<Admi
     if (!title || !body) return { error: "The draft needs a title and a body." };
     const prev = await latestDraft(night.id);
     await env.DB.prepare(
-      `INSERT INTO night_drafts (night_id, version, title, dek, night_label, damage, ride_home, body, source, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'edit', ?)`,
+      `INSERT INTO night_drafts (night_id, version, title, dek, night_label, damage, ride_home, body, songs, source, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'edit', ?)`,
     )
-      .bind(night.id, (prev?.version ?? 0) + 1, title, clean(d.dek, 200), clean(d.nightLabel, 80), clean(d.damage, 80), clean(d.rideHome, 160), body, new Date().toISOString())
+      .bind(night.id, (prev?.version ?? 0) + 1, title, clean(d.dek, 200), clean(d.nightLabel, 80), clean(d.damage, 80), clean(d.rideHome, 160), body,
+        // Songs: the edited list if given, otherwise carry over the previous version's.
+        d.songs ? JSON.stringify(cleanSongs(d.songs)) : (prev?.songs ?? null), new Date().toISOString())
       .run();
     revalidatePath(`/nights/${night.id}`);
     return { ok: true };
@@ -218,26 +247,144 @@ export async function addAdminNote(nightId: string, body: string): Promise<Admin
   }
 }
 
-/** Places you went, with their websites. Claude may link only these. */
-export async function setVenues(nightId: string, venues: Array<{ name: string; url: string }>): Promise<AdminResult> {
+/** Places you went (name, website, party/eat). Claude may link only these, and they attach to the post on drop. */
+export async function setVenues(nightId: string, venues: Array<{ name: string; url: string; kind?: string }>): Promise<AdminResult> {
   try {
     const { env, night } = await adminNight(nightId);
-    const clean_: Array<{ name: string; url: string }> = [];
-    for (const v of (Array.isArray(venues) ? venues : []).slice(0, 12)) {
-      const name = clean(v?.name, 60);
-      const raw = String(v?.url ?? "").trim();
-      if (!name && !raw) continue;
-      if (!name) return { error: "Every website needs a place name." };
-      let url: URL;
-      try {
-        url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
-      } catch {
-        return { error: `${name}: that website doesn't look right.` };
+    const list = cleanVenues(venues);
+    if ("error" in list) return { error: list.error };
+    await env.DB.prepare("UPDATE nights SET venues = ? WHERE id = ?").bind(JSON.stringify(list), night.id).run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Change the guest cap or +1s later. Raising the cap pulls people off the waitlist. */
+export async function setGuestLimits(nightId: string, capacity: string, plusOnes: string): Promise<AdminResult> {
+  try {
+    const { env, night } = await adminNight(nightId);
+    const limits = guestLimits(capacity, plusOnes);
+    if ("error" in limits) return limits;
+    await env.DB.batch([
+      env.DB.prepare("UPDATE nights SET capacity = ?, max_plus_ones = ? WHERE id = ?").bind(limits.capacity, limits.maxPlusOnes, night.id),
+      // Lowering the +1 limit trims existing +1s to fit.
+      env.DB.prepare("UPDATE night_rsvps SET plus_ones = MIN(plus_ones, ?) WHERE night_id = ?").bind(limits.maxPlusOnes, night.id),
+    ]);
+    await promoteWaitlist(env.DB, night.id);
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Take someone off the guest list (and the waitlist moves up). */
+export async function removeRsvp(nightId: string, deviceId: string): Promise<AdminResult> {
+  try {
+    const { env, night } = await adminNight(nightId);
+    await env.DB.prepare("DELETE FROM night_rsvps WHERE night_id = ? AND device_id = ?").bind(night.id, deviceId).run();
+    await promoteWaitlist(env.DB, night.id);
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Add a co-host by Google email. Admins only. */
+export async function addHost(nightId: string, emailRaw: string): Promise<AdminResult> {
+  try {
+    const admin = await requireAdmin();
+    const { env, night } = await ownerNight(nightId);
+    const email = String(emailRaw ?? "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter the Google email they sign in with." };
+    await env.DB.prepare("INSERT OR IGNORE INTO night_hosts (night_id, email, added_by, created_at) VALUES (?, ?, ?, ?)")
+      .bind(night.id, email, admin.email, new Date().toISOString())
+      .run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function removeHost(nightId: string, email: string): Promise<AdminResult> {
+  try {
+    const { env, night } = await ownerNight(nightId);
+    await env.DB.prepare("DELETE FROM night_hosts WHERE night_id = ? AND email = ?").bind(night.id, String(email).toLowerCase()).run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export type InviteEdit = {
+  name: string;
+  startsAt: string; // datetime-local, Michigan time
+  closesAt: string;
+  location: string;
+  dressCode: string;
+  details: string;
+  rules: string; // one per line
+};
+
+/** Hosts and admins can change the invite any time before the post drops. */
+export async function updateInvite(nightId: string, f: InviteEdit): Promise<AdminResult> {
+  try {
+    const { env, night } = await adminNight(nightId);
+    if (night.status === "dropped") return { error: "This night already dropped." };
+    const name = clean(f.name, 100);
+    if (!name) return { error: "Name the night." };
+    const opensAt = detroitToIso(String(f.startsAt ?? ""));
+    if (!opensAt) return { error: "Pick when the party starts." };
+    const closesAt = detroitToIso(String(f.closesAt ?? ""));
+    if (!closesAt) return { error: "Pick when photos close." };
+    if (new Date(closesAt) <= new Date(opensAt)) return { error: "Photos have to close after the party starts." };
+    const rules = String(f.rules ?? "")
+      .split("\n")
+      .map((l) => l.trim().slice(0, 120))
+      .filter(Boolean)
+      .slice(0, 12)
+      .join("\n");
+    // Moving the close time into the future reopens a closed link.
+    const reopen = night.status === "closed" && new Date(closesAt) > new Date();
+    await env.DB.prepare(
+      `UPDATE nights SET name = ?, night_of = ?, opens_at = ?, closes_at = ?, location_text = ?, dress_code = ?, invite_details = ?, invite_rules = ?,
+              status = CASE WHEN ? THEN 'collecting' ELSE status END WHERE id = ?`,
+    )
+      .bind(name, String(f.startsAt).slice(0, 10), opensAt, closesAt, clean(f.location, 200), clean(f.dressCode, 100), clean(f.details, 2000), rules || null, reopen ? 1 : 0, night.id)
+      .run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Attach an uploaded video/photo (from /api/nights/[id]/invite-media) to the invite. */
+export async function setInviteMedia(nightId: string, key: string | null): Promise<AdminResult> {
+  try {
+    const { env, night, access } = await adminNight(nightId);
+    const old = night.invite_media_key;
+    if (!key) {
+      await env.DB.prepare("UPDATE nights SET invite_media_key = NULL, invite_media_kind = NULL WHERE id = ?").bind(night.id).run();
+    } else {
+      const up = await env.DB.prepare("SELECT kind, content_type FROM uploads WHERE r2_key = ? AND email = ? AND used = 0")
+        .bind(key, access.email)
+        .first<{ kind: string; content_type: string }>();
+      const head = up ? await env.MEDIA.head(key) : null;
+      if (!up || !head || (up.kind !== "video" && up.kind !== "photo") || head.httpMetadata?.contentType?.toLowerCase() !== up.content_type) {
+        return { error: "That upload didn't come through. Try again." };
       }
-      if (url.protocol !== "https:" && url.protocol !== "http:") return { error: `${name}: websites have to start with http or https.` };
-      clean_.push({ name, url: url.toString().slice(0, 300) });
+      await env.DB.batch([
+        env.DB.prepare("UPDATE nights SET invite_media_key = ?, invite_media_kind = ? WHERE id = ?").bind(key, up.kind, night.id),
+        env.DB.prepare("UPDATE uploads SET used = 1 WHERE r2_key = ?").bind(key),
+      ]);
     }
-    await env.DB.prepare("UPDATE nights SET venues = ? WHERE id = ?").bind(JSON.stringify(clean_), night.id).run();
+    if (old && old !== key) await env.MEDIA.delete(old);
     revalidatePath(`/nights/${night.id}`);
     return { ok: true };
   } catch (e) {
@@ -253,8 +400,16 @@ async function dropFieldsFor(
   if (night.status === "dropped" || (night.status === "dropping" && !isStuckDrop(night))) throw new NotAllowed("This night already dropped.");
   const fields = validatePostFields({ ...input, nightOf: night.night_of });
   if ("error" in fields) return { ok: false, error: fields.error };
-  const admin = await requireAdmin();
-  const drop: DropFields = { ...fields, authorEmail: admin.email };
+  const admin = { email: (await requireNightAccess(night.id)).email };
+  // Places and songs come from the night and its latest draft, never from the client.
+  const draft = await latestDraft(night.id);
+  let songs: Song[] = [];
+  try {
+    songs = cleanSongs(JSON.parse(draft?.songs ?? "[]"));
+  } catch {
+    songs = [];
+  }
+  const drop: DropFields = { ...fields, authorEmail: admin.email, venues: parseVenueJson(night.venues), songs };
   return { ok: true, env, night, drop };
 }
 
@@ -322,7 +477,7 @@ export async function cancelSchedule(nightId: string): Promise<AdminResult> {
 /** Deletes the night, its inbox files and everything people wrote. A dropped post stays. */
 export async function deleteNight(nightId: string): Promise<AdminResult> {
   try {
-    const { env, night } = await adminNight(nightId);
+    const { env, night } = await ownerNight(nightId);
     for (let i = 0; i < 20; i++) {
       const listed = await env.INBOX.list({ prefix: `nights/${night.id}/`, limit: 40 });
       if (!listed.objects.length) break;

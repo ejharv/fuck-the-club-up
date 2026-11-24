@@ -1,119 +1,76 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { createPost } from "@/app/actions";
-import { ACCEPT_ATTR, ALLOWED_TYPES, MAX_BYTES, MAX_FILES_PER_POST } from "@/lib/media-rules";
-import { toEmbed } from "@/lib/embeds";
-import { putWithProgress as put, scrubPhoto } from "@/lib/scrub-photo";
-import { HOUSE_RULES, SECTIONS } from "@/lib/sections";
+import { ClaudeAssist, type AssistFields } from "@/components/ClaudeAssist";
+import { MediaPicker, pickerBusy, pickerFailed, type PickedItem } from "@/components/MediaPicker";
+import { PhoneUploadQR } from "@/components/PhoneUploadQR";
+import { VenuesEditor, blankVenue, type VenueRow } from "@/components/VenuesEditor";
+import { MAX_FILES_PER_POST } from "@/lib/media-rules";
+import { HOUSE_RULES } from "@/lib/sections";
+import { songsToLines } from "@/lib/tracks";
 
-type Item = {
-  id: string;
-  caption: string;
-  // file uploads
-  file?: File;
-  preview?: string;
-  kind?: "photo" | "video" | "audio";
-  key?: string;
-  progress?: number;
-  error?: string;
-  // embeds
-  url?: string;
-};
+const FIELD_NAMES: Record<keyof AssistFields, string> = { title: "title", dek: "dek", night: "night", damage: "damage", rideHome: "rideHome", body: "body" };
 
 export function NewPostForm({ today }: { today: string }) {
-  const [items, setItems] = useState<Item[]>([]);
-  const [link, setLink] = useState("");
-  const [linkError, setLinkError] = useState<string | null>(null);
+  const form = useRef<HTMLFormElement>(null);
+  const [items, setItems] = useState<PickedItem[]>([]);
+  const [coverKey, setCoverKey] = useState<string | null>(null);
+  const [venues, setVenues] = useState<VenueRow[]>([blankVenue()]);
+  const [songs, setSongs] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [coverKey, setCoverKey] = useState<string | undefined>();
-  const [section, setSection] = useState<string>("night-reports");
   const [pending, startTransition] = useTransition();
-  const fileInput = useRef<HTMLInputElement>(null);
+  const uploading = pickerBusy(items);
 
-  const patch = (id: string, change: Partial<Item>) =>
-    setItems((list) => list.map((i) => (i.id === id ? { ...i, ...change } : i)));
-
-  async function upload(item: Item) {
-    try {
-      const file = item.kind === "photo" ? await scrubPhoto(item.file!) : item.file!;
-      const res = await fetch("/api/uploads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contentType: file.type, size: file.size }),
-      });
-      const data = (await res.json()) as { key?: string; uploadUrl?: string; headers?: Record<string, string>; error?: string };
-      if (!res.ok || !data.key || !data.uploadUrl) throw new Error(data.error ?? "Upload couldn't start.");
-      await put(data.uploadUrl, file, data.headers ?? {}, (p) => patch(item.id, { progress: p }));
-      patch(item.id, { key: data.key, progress: 1 });
-    } catch (e) {
-      patch(item.id, { error: e instanceof Error ? e.message : "Upload failed." });
+  const field = (name: string) => form.current?.elements.namedItem(name) as HTMLInputElement | HTMLTextAreaElement | null;
+  const getFields = (): AssistFields => ({
+    title: field("title")?.value ?? "",
+    dek: field("dek")?.value ?? "",
+    night: field("night")?.value ?? "",
+    damage: field("damage")?.value ?? "",
+    rideHome: field("rideHome")?.value ?? "",
+    body: field("body")?.value ?? "",
+  });
+  const apply = (patch: Partial<AssistFields>) => {
+    for (const [k, v] of Object.entries(patch)) {
+      const el = field(FIELD_NAMES[k as keyof AssistFields]);
+      if (el && typeof v === "string") el.value = v;
     }
-  }
+  };
+  const addFromPhone = useCallback((fresh: PickedItem[]) => setItems((l) => [...l, ...fresh]), []);
 
-  function addFiles(files: FileList | null) {
-    if (!files) return;
-    const room = MAX_FILES_PER_POST - items.length;
-    const added: Item[] = [];
-    for (const file of Array.from(files).slice(0, Math.max(room, 0))) {
-      const type = ALLOWED_TYPES[file.type];
-      const item: Item = { id: crypto.randomUUID(), caption: "", file, kind: type?.kind, progress: 0 };
-      if (!type) item.error = `${file.name}: that file type isn't supported.`;
-      else if (file.size > MAX_BYTES[type.kind]) item.error = `${file.name} is over ${Math.round(MAX_BYTES[type.kind] / 1048576)} MB.`;
-      else if (type.kind === "photo") item.preview = URL.createObjectURL(file);
-      added.push(item);
-    }
-    setItems((list) => [...list, ...added]);
-    added.filter((i) => !i.error).forEach(upload);
-    if (fileInput.current) fileInput.current.value = "";
-  }
-
-  function addLink() {
-    if (!toEmbed(link)) {
-      setLinkError("Paste a YouTube, Spotify or SoundCloud link.");
-      return;
-    }
-    setItems((list) => [...list, { id: crypto.randomUUID(), caption: "", url: link.trim() }]);
-    setLink("");
-    setLinkError(null);
-  }
-
-  const uploading = items.some((i) => i.file && !i.key && !i.error);
-  const failed = items.some((i) => i.error);
-
-  function submit(form: FormData) {
+  function submit(data: FormData) {
     setError(null);
     if (uploading) return setError("Wait for the uploads to finish.");
-    if (failed) return setError("Remove the files that didn't upload, then post.");
+    if (pickerFailed(items)) return setError("Remove the files that didn't upload, then post.");
     startTransition(async () => {
       const result = await createPost({
-        title: String(form.get("title") ?? ""),
-        dek: String(form.get("dek") ?? ""),
-        section: String(form.get("section") ?? ""),
-        night: String(form.get("night") ?? ""),
-        nightOf: String(form.get("nightOf") ?? ""),
-        damage: String(form.get("damage") ?? ""),
-        rideHome: String(form.get("rideHome") ?? ""),
-        body: String(form.get("body") ?? ""),
-        consent: form.get("consent") === "yes",
-        coverKey,
+        title: String(data.get("title") ?? ""),
+        dek: String(data.get("dek") ?? ""),
+        section: "night-reports",
+        night: String(data.get("night") ?? ""),
+        nightOf: String(data.get("nightOf") ?? ""),
+        damage: String(data.get("damage") ?? ""),
+        rideHome: String(data.get("rideHome") ?? ""),
+        body: String(data.get("body") ?? ""),
+        consent: data.get("consent") === "yes",
+        coverKey: coverKey ?? undefined,
         media: items.map((i) => ({ key: i.key, url: i.url, caption: i.caption })),
+        venues,
+        songsText: songs,
       });
       if (result?.error) setError(result.error);
     });
   }
 
   return (
-    <form action={submit} className="mt-8 space-y-7">
-      <div>
-        <label htmlFor="section" className="mb-2 block font-bold">Section</label>
-        <select id="section" name="section" value={section} onChange={(e) => setSection(e.target.value)} className="field">
-          {SECTIONS.map((s) => (
-            <option key={s.slug} value={s.slug}>{s.name}</option>
-          ))}
-        </select>
-        <p className="mt-2 text-sm text-dim">{SECTIONS.find((s) => s.slug === section)?.blurb}</p>
-      </div>
+    <form ref={form} action={submit} className="mt-8 space-y-7">
+      <ClaudeAssist
+        getFields={getFields}
+        venues={venues.filter((v) => v.name).map((v) => ({ name: v.name, url: v.url }))}
+        onApply={apply}
+        onSongs={(s) => setSongs((cur) => [cur.trim(), songsToLines(s)].filter(Boolean).join("\n"))}
+      />
 
       <div>
         <label htmlFor="title" className="mb-2 block font-bold">Title</label>
@@ -142,91 +99,37 @@ export function NewPostForm({ today }: { today: string }) {
             <input id="damage" name="damage" maxLength={80} className="field" placeholder="$20 and my dignity" />
           </div>
           <div>
-            <label htmlFor="rideHome" className="mb-2 block text-sm font-bold">
-              Ride home{section === "night-reports" ? "" : " (optional)"}
-            </label>
-            <input id="rideHome" name="rideHome" maxLength={160} required={section === "night-reports"} className="field" placeholder="Two Ubers and the buddy rule" />
+            <label htmlFor="rideHome" className="mb-2 block text-sm font-bold">Ride home</label>
+            <input id="rideHome" name="rideHome" maxLength={160} required className="field" placeholder="Two Ubers and the buddy rule" />
           </div>
         </div>
       </fieldset>
 
       <div>
         <label htmlFor="body" className="mb-2 block font-bold">The story</label>
-        <textarea id="body" name="body" required rows={12} maxLength={60000} className="field leading-relaxed" placeholder="Start from the pregame. Short paragraphs, real details. Markdown works: **bold**, _italic_, ## headings, > quotes, lists." />
+        <textarea id="body" name="body" required rows={12} maxLength={60000} className="field leading-relaxed" placeholder="Start from the pregame. Short paragraphs, real details. Rough notes are fine: Ask Claude can turn them into a post. Markdown works: **bold**, _italic_, ## headings, > quotes, lists." />
       </div>
 
       <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">
-        <legend className="mono px-2 text-maize">Photos, videos and music</legend>
-        <p className="text-sm text-dim">
-          Photos up to 25 MB, videos up to 400 MB, audio up to 60 MB. Tap a photo to make it the cover.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-3">
-          <label className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center rounded-full border border-ink px-5 font-bold sm:w-auto hover:border-maize hover:text-pink focus-within:outline focus-within:outline-2 focus-within:outline-pink">
-            Add files
-            <input ref={fileInput} type="file" multiple accept={ACCEPT_ATTR} className="sr-only" onChange={(e) => addFiles(e.target.files)} />
-          </label>
-        </div>
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <label htmlFor="link" className="sr-only">Music or video link</label>
-          <input id="link" value={link} onChange={(e) => setLink(e.target.value)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addLink())} inputMode="url" autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="done" className="field min-w-0 sm:flex-1" placeholder="Paste a Spotify, SoundCloud or YouTube link" />
-          <button type="button" onClick={addLink} className="min-h-11 shrink-0 rounded-full border border-ink px-5 font-bold hover:border-maize hover:text-pink">
-            Add link
-          </button>
-        </div>
-        {linkError && <p role="alert" className="mt-2 text-sm text-pink">{linkError}</p>}
-
-        {items.length > 0 && (
-          <ul className="mt-6 space-y-4">
-            {items.map((i) => (
-              <li key={i.id} className="flex gap-3 rounded-md bg-night-2 p-3 sm:gap-4">
-                {i.preview ? (
-                  <button
-                    type="button"
-                    onClick={() => i.key && setCoverKey(i.key)}
-                    aria-pressed={!!i.key && coverKey === i.key}
-                    aria-label="Use as cover photo"
-                    className={`h-20 w-20 shrink-0 overflow-hidden rounded ${i.key && coverKey === i.key ? "ring-2 ring-maize" : ""}`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={i.preview} alt="" className="h-full w-full object-cover" />
-                  </button>
-                ) : (
-                  <div className="grid h-20 w-20 shrink-0 place-items-center rounded bg-night text-sm font-bold text-maize">
-                    {i.url ? "Link" : i.kind === "video" ? "Video" : i.kind === "audio" ? "Audio" : "File"}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm text-dim">{i.file?.name ?? i.url}</p>
-                  {i.error ? (
-                    <p role="alert" className="mt-1 text-sm text-pink">{i.error}</p>
-                  ) : i.file && !i.key ? (
-                    <div className="mt-2 h-1.5 overflow-hidden rounded bg-night" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((i.progress ?? 0) * 100)} aria-label="Upload progress">
-                      <div className="h-full bg-maize transition-[width]" style={{ width: `${(i.progress ?? 0) * 100}%` }} />
-                    </div>
-                  ) : (
-                    <input
-                      value={i.caption}
-                      onChange={(e) => patch(i.id, { caption: e.target.value })}
-                      maxLength={300}
-                      aria-label="Caption"
-                      placeholder="Caption (optional)"
-                      enterKeyHint="done"
-                      className="field mt-2 py-2 text-base"
-                    />
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setItems((list) => list.filter((x) => x.id !== i.id))}
-                  className="-mr-1 -mt-3 inline-flex min-h-11 items-center self-start px-1 text-sm text-dim underline underline-offset-4 hover:text-pink"
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <legend className="mono px-2 text-maize">Where we went</legend>
+        <p className="mb-4 text-sm text-dim">These show up on the Places tab, linked back to this post.</p>
+        <VenuesEditor rows={venues} setRows={setVenues} />
       </fieldset>
+
+      <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4 sm:p-6">
+        <legend className="mono px-2 text-maize">Photos, videos and music</legend>
+        <p className="mb-4 text-sm text-dim">Photos up to 25 MB, videos up to 400 MB, audio up to 60 MB. Tap a photo to make it the cover.</p>
+        <div className="mb-4">
+          <PhoneUploadQR onFiles={addFromPhone} />
+        </div>
+        <MediaPicker items={items} setItems={setItems} coverKey={coverKey} setCoverKey={setCoverKey} room={MAX_FILES_PER_POST} />
+      </fieldset>
+
+      <div>
+        <label htmlFor="songs" className="mb-2 block font-bold">Songs of the night</label>
+        <textarea id="songs" value={songs} onChange={(e) => setSongs(e.target.value)} rows={4} className="field font-mono text-[16px] leading-relaxed sm:text-sm" placeholder={"The Killers - Mr. Brightside\nDancing Queen"} />
+        <p className="mt-1 text-sm text-dim">One per line. Links you added above are included automatically. They go on the Playlists tab.</p>
+      </div>
 
       <label className="flex cursor-pointer gap-3 rounded-md border border-line bg-night-2 p-4">
         <input type="checkbox" name="consent" value="yes" required className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />

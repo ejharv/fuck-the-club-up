@@ -28,3 +28,29 @@ export function safeEqual(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+
+async function aesKey(secret: string) {
+  const raw = await crypto.subtle.digest("SHA-256", enc.encode(`ftcu-link-key:${secret}`));
+  return crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
+}
+
+const b64 = (b: Uint8Array) => btoa(String.fromCharCode(...b));
+const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+/** AES-GCM with a key derived from the site secret. Output: base64(iv).base64(ciphertext). */
+export async function encryptText(secret: string, text: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await aesKey(secret), enc.encode(text)));
+  return `${b64(iv)}.${b64(ct)}`;
+}
+
+export async function decryptText(secret: string, blob: string | null): Promise<string | null> {
+  if (!blob) return null;
+  try {
+    const [iv, ct] = blob.split(".");
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(iv) }, await aesKey(secret), unb64(ct));
+    return new TextDecoder().decode(pt);
+  } catch {
+    return null;
+  }
+}

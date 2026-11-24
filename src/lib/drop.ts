@@ -1,5 +1,8 @@
 import "server-only";
+import { collectionStatements } from "./collections";
 import { insertPostStatements, type MediaInsert, type PostFields } from "./post-fields";
+import type { Song } from "./tracks";
+import type { Venue } from "./venues";
 import { ALLOWED_TYPES } from "./media-rules";
 
 /**
@@ -14,7 +17,7 @@ export const COPY_BATCH = 8; // ~2 R2 calls per file + 3 D1 calls stays well und
 
 export const GUEST_MAX_BYTES = { photo: 25 * 1048576, video: 200 * 1048576, audio: 60 * 1048576 } as const;
 
-export type DropFields = PostFields & { authorEmail: string };
+export type DropFields = PostFields & { authorEmail: string; venues?: Venue[]; songs?: Song[] };
 
 /** Copies up to COPY_BATCH kept files. Returns how many are left. */
 export async function copyBatch(env: CloudflareEnv, nightId: string): Promise<number> {
@@ -68,8 +71,10 @@ export async function finishDrop(env: CloudflareEnv, nightId: string): Promise<s
   const cover = files.find((m) => m.is_cover && m.kind === "photo")?.copied_key ?? files.find((m) => m.kind === "photo")?.copied_key ?? null;
 
   const insert = insertPostStatements(env.DB, { ...f, nightOf: night.night_of }, media, cover, f.authorEmail);
+  const collections = await collectionStatements(env.DB, insert.id, f.venues ?? [], f.songs ?? [], insert.mediaRows);
   await env.DB.batch([
     ...insert.stmts,
+    ...collections,
     env.DB.prepare("UPDATE nights SET status = 'dropped', post_id = ?, drop_at = NULL WHERE id = ? AND post_id IS NULL").bind(insert.id, nightId),
   ]);
   return insert.id;

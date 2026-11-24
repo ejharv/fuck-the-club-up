@@ -25,6 +25,7 @@ How brief 05 part 2 was built (decided with the site owner):
 - People with the link also write **their account of the night**. Claude (Sonnet 4.6 on Bedrock) merges the accounts into one draft. Link holders read the draft, leave notes and approve each version; admins rewrite or edit, then drop.
 - The uploads double as a **shared album** that link holders can view and download, which replaces the brief's "never reveal other uploads". The inbox bucket stays private; the album is served through the Worker to token holders only.
 - **No names**: posts show no author, and contributors never sign in (nicknames only).
+- **Not just Ann Arbor.** Nights happen in different cities (Grand Rapids is next), so site copy, link previews and the Claude prompt don't name a home city. Brief 01's "Ann Arbor first" no longer applies; posts name a city only when the night does.
 - **Albums are kept forever** (until the night is deleted), so there's no 30-day lifecycle rule on the inbox bucket.
 - **No business directory.** Posts just link to venues' own websites: crew posts with normal Markdown links, Claude drafts with the per-night list of places and websites the admin enters.
 

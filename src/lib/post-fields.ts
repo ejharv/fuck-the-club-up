@@ -31,7 +31,7 @@ export const clean = (v: unknown, max: number) => {
   return s.length ? s.slice(0, max) : null;
 };
 
-/** Today's date in Ann Arbor, YYYY-MM-DD. */
+/** Today's date in Michigan time (America/Detroit), YYYY-MM-DD. */
 export function todayInDetroit(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Detroit", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
 }
@@ -53,8 +53,8 @@ export function validatePostFields(input: PostFieldsInput): PostFields | { error
   const body = clean(input.body, 60_000);
   if (!title) return { error: "Give the post a title." };
   if (!body) return { error: "Write the post before publishing it." };
-  const section = sectionBySlug(String(input.section ?? ""))?.slug;
-  if (!section) return { error: "Pick a section for the post." };
+  // Night Reports is the only blog section now.
+  const section = sectionBySlug(String(input.section ?? "night-reports"))?.slug ?? "night-reports";
   const rideHome = clean(input.rideHome, 160);
   if (section === "night-reports" && !rideHome) return { error: "Night reports have to say how everyone got home." };
   const nightOf = validNightOf(clean(input.nightOf, 10));
@@ -99,6 +99,7 @@ export function insertPostStatements(
   const id = crypto.randomUUID();
   const slug = slugify(f.title);
   const now = new Date().toISOString();
+  const mediaRows = media.map((m) => ({ id: crypto.randomUUID(), kind: m.kind, url: m.url, caption: m.caption }));
   const stmts = [
     DB.prepare(
       `INSERT INTO posts (id, slug, title, dek, section, night, night_of, damage, ride_home, body, cover_key,
@@ -108,8 +109,8 @@ export function insertPostStatements(
     ...media.map((m, i) =>
       DB.prepare(
         "INSERT INTO media (id, post_id, position, kind, r2_key, url, content_type, caption) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      ).bind(crypto.randomUUID(), id, i, m.kind, m.key, m.url, m.type, m.caption),
+      ).bind(mediaRows[i].id, id, i, m.kind, m.key, m.url, m.type, m.caption),
     ),
   ];
-  return { id, slug, stmts };
+  return { id, slug, stmts, mediaRows };
 }

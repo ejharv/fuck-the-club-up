@@ -6,7 +6,10 @@ import { signIn, signOut } from "@/auth";
 import { cf } from "@/lib/env";
 import { toEmbed } from "@/lib/embeds";
 import { ALLOWED_TYPES, MAX_BYTES, MAX_FILES_PER_POST, type FileKind } from "@/lib/media-rules";
+import { collectionStatements } from "@/lib/collections";
 import { clean, insertPostStatements, validatePostFields, type MediaInsert, type PostFieldsInput } from "@/lib/post-fields";
+import { songsFromLines } from "@/lib/tracks";
+import { cleanVenues } from "@/lib/venues";
 import { safePath } from "@/lib/safe-path";
 import { NotAllowed, requireAdmin, requireMember } from "@/lib/session";
 
@@ -23,6 +26,10 @@ export type ActionResult = { error: string } | undefined;
 export type NewPostInput = PostFieldsInput & {
   media: Array<{ key?: string; url?: string; caption?: string }>;
   coverKey?: string;
+  /** Places the night went (name, website, party/eat). */
+  venues?: Array<{ name: string; url: string; kind?: string }>;
+  /** Songs of the night, one per line: "Artist - Title" or "Title". */
+  songsText?: string;
 };
 
 /**
@@ -79,10 +86,14 @@ export async function createPost(input: NewPostInput): Promise<ActionResult> {
     const firstPhoto = media.find((m) => m.kind === "photo")?.key ?? null;
     const coverKey = media.some((m) => m.kind === "photo" && m.key === input.coverKey) ? input.coverKey! : firstPhoto;
 
+    const venues = cleanVenues(input.venues);
+    if ("error" in venues) return venues;
     const insert = insertPostStatements(env.DB, fields, media, coverKey, member.email);
     slug = insert.slug;
+    const collections = await collectionStatements(env.DB, insert.id, venues, songsFromLines(String(input.songsText ?? "")), insert.mediaRows);
     await env.DB.batch([
       ...insert.stmts,
+      ...collections,
       ...media
         .filter((m) => m.key)
         .map((m) => env.DB.prepare("UPDATE uploads SET used = 1 WHERE r2_key = ?").bind(m.key)),
@@ -118,6 +129,9 @@ export type EditPostInput = PostFieldsInput & {
   addMedia?: Array<{ key?: string; url?: string; caption?: string }>;
   /** Use one of the new uploads as the cover. */
   coverNewKey?: string | null;
+  /** Replace the post's places / songs when given. */
+  venues?: Array<{ name: string; url: string; kind?: string }>;
+  songsText?: string;
 };
 
 export async function updatePost(input: EditPostInput): Promise<ActionResult> {
@@ -170,6 +184,19 @@ export async function updatePost(input: EditPostInput): Promise<ActionResult> {
     ]);
     const keys = remove.map((id) => byId.get(id)!.r2_key).filter((k): k is string => Boolean(k));
     if (keys.length) await env.MEDIA.delete(keys);
+
+    // Rebuild places and songs from the post as it now stands.
+    const venues = input.venues ? cleanVenues(input.venues) : null;
+    if (venues && "error" in venues) return venues;
+    const current = await env.DB.prepare("SELECT id, kind, url, caption FROM media WHERE post_id = ? ORDER BY position")
+      .bind(post.id)
+      .all<{ id: string; kind: string; url: string | null; caption: string | null }>();
+    const keepVenues = venues ?? (await env.DB.prepare("SELECT name, url, kind FROM post_venues WHERE post_id = ? ORDER BY position").bind(post.id).all<{ name: string; url: string | null; kind: "party" | "eat" }>()).results;
+    const keepSongs =
+      input.songsText !== undefined
+        ? songsFromLines(input.songsText)
+        : (await env.DB.prepare("SELECT title, artist FROM post_tracks WHERE post_id = ? AND source = 'mentioned' ORDER BY position").bind(post.id).all<{ title: string; artist: string | null }>()).results;
+    await env.DB.batch(await collectionStatements(env.DB, post.id, keepVenues, keepSongs, current.results));
   } catch (e) {
     if (e instanceof NotAllowed) return { error: e.message };
     throw e;
