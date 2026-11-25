@@ -44,9 +44,9 @@ export default async function NightAdminPage({
     DB.prepare("SELECT device_id, nickname, body, updated_at FROM night_accounts WHERE night_id = ? ORDER BY updated_at")
       .bind(id)
       .all<{ device_id: string; nickname: string; body: string; updated_at: string }>(),
-    DB.prepare("SELECT device_id, nickname, answer, plus_ones, waitlisted FROM night_rsvps WHERE night_id = ? ORDER BY created_at")
+    DB.prepare("SELECT device_id, nickname, answer, plus_ones, waitlisted, approved FROM night_rsvps WHERE night_id = ? ORDER BY created_at")
       .bind(id)
-      .all<{ device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number }>(),
+      .all<{ device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number; approved: number }>(),
     latestDraft(id),
     night.post_id ? DB.prepare("SELECT slug FROM posts WHERE id = ?").bind(night.post_id).first<{ slug: string }>() : null,
     DB.prepare("SELECT email, display_name FROM night_hosts WHERE night_id = ? ORDER BY created_at").bind(id).all<{ email: string; display_name: string | null }>(),
@@ -119,6 +119,7 @@ export default async function NightAdminPage({
           rsvps.results.map(async (r) => ({ ...r, mePath: link ? `/drop/${link}/me/${await mePass(env.AUTH_SECRET, night.id, r.device_id)}` : null })),
         )}
         guestLimits={{ capacity: night.capacity }}
+        privacy={{ privateInvite: Boolean(night.private_invite), privatePost: Boolean(night.private_post), dropped: Boolean(night.post_id) }}
         isAdmin={await canManageNight(night, access.email, access.role)}
         hosts={hosts.results.map((h) => ({ email: h.email, name: h.display_name ?? "" }))}
         me={access.email}

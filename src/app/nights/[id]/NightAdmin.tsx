@@ -31,6 +31,8 @@ import {
   addHost,
   removeHost,
   removeNightSong,
+  approveRsvp,
+  setPrivacy,
   approveGuestPlace,
   removeGuestPlaceAdmin,
   setHostName,
@@ -414,7 +416,43 @@ function HostsPanel({ nightId, hosts, isAdmin, me }: { nightId: string; hosts: A
   );
 }
 
-type Rsvp = { device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number; mePath: string | null };
+type Rsvp = { device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number; approved: number; mePath: string | null };
+
+function PrivacyPanel({ nightId, privacy }: { nightId: string; privacy: { privateInvite: boolean; privatePost: boolean; dropped: boolean } }) {
+  const { pending, error, run } = useRun();
+  const [inv, setInv] = useState(privacy.privateInvite);
+  const [post, setPost] = useState(privacy.privatePost);
+  const save = (i: boolean, p: boolean) => {
+    setInv(i);
+    setPost(p);
+    run(() => setPrivacy(nightId, { privateInvite: i, privatePost: p }));
+  };
+  return (
+    <section aria-labelledby="privacy-h" className="mt-6 rounded-md border border-line p-4 sm:mt-8 sm:p-5">
+      <h2 id="privacy-h" className="display text-xl">Private night</h2>
+      <label className="mt-3 flex cursor-pointer gap-3">
+        <input type="checkbox" checked={inv} disabled={pending} onChange={(e) => save(e.target.checked, post)} className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />
+        <span>
+          <strong>Approval to get in</strong>
+          <span className="block text-sm text-dim">
+            {inv ? "On: people ask to come and you approve them in the guest list. Turning it off lets everyone who asked in." : "Off: anyone with the link can RSVP and see the details."}
+          </span>
+        </span>
+      </label>
+      <label className="mt-3 flex cursor-pointer gap-3">
+        <input type="checkbox" checked={post} disabled={pending} onChange={(e) => save(inv, e.target.checked)} className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />
+        <span>
+          <strong>Write-up stays private</strong>
+          <span className="block text-sm text-dim">
+            {post ? "On: the post stays off the public site; crew and people from the night can read it." : "Off: the post goes on the public site like any night report."}
+            {privacy.dropped ? " This changes the post that's already up." : ""}
+          </span>
+        </span>
+      </label>
+      <ErrorLine error={error} />
+    </section>
+  );
+}
 
 /** Copies a guest's personal link so a host can send it to someone who got locked out (e.g. RSVPed inside Snapchat). */
 function CopyGuestLink({ path, name }: { path: string; name: string }) {
@@ -443,10 +481,12 @@ function CopyGuestLink({ path, name }: { path: string; name: string }) {
 function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[]; limits: { capacity: number | null } }) {
   const { pending, error, run } = useRun();
   const [capacity, setCapacity] = useState(limits.capacity === null ? "" : String(limits.capacity));
-  const going = rsvps.filter((g) => g.answer === "going" && !g.waitlisted);
-  const waitlist = rsvps.filter((g) => g.answer === "going" && g.waitlisted);
-  const maybe = rsvps.filter((g) => g.answer === "maybe");
-  const cant = rsvps.filter((g) => g.answer === "cant");
+  const requests = rsvps.filter((g) => !g.approved);
+  const inList = rsvps.filter((g) => g.approved);
+  const going = inList.filter((g) => g.answer === "going" && !g.waitlisted);
+  const waitlist = inList.filter((g) => g.answer === "going" && g.waitlisted);
+  const maybe = inList.filter((g) => g.answer === "maybe");
+  const cant = inList.filter((g) => g.answer === "cant");
   const headcount = going.length;
   const groups: Array<[string, Rsvp[]]> = [
     ["Going", going],
@@ -471,6 +511,24 @@ function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[
         </button>
       </div>
       <p className="mt-2 text-sm text-dim">Raising the limit lets people in off the waitlist, oldest first.</p>
+      {requests.length > 0 && (
+        <div className="mt-5 rounded-md border-2 border-maize p-3">
+          <p className="mono text-maize">Asking to come ({requests.length})</p>
+          <ul className="mt-2 divide-y divide-line">
+            {requests.map((g) => (
+              <li key={g.device_id} className="flex min-h-12 items-center justify-between gap-3">
+                <span className="min-w-0 flex-1 truncate font-bold">{g.nickname}</span>
+                <button type="button" disabled={pending} onClick={() => run(() => approveRsvp(nightId, g.device_id))} className="inline-flex min-h-11 items-center rounded-full bg-maize px-4 text-sm font-bold text-night hover:bg-ink">
+                  Approve
+                </button>
+                <button type="button" disabled={pending} onClick={() => confirm(`Say no to ${g.nickname}?`) && run(() => removeRsvp(nightId, g.device_id))} className={textBtn}>
+                  Decline
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="mt-5 space-y-5">
         {groups.map(([label, list]) =>
           list.length ? (
@@ -495,7 +553,7 @@ function GuestsPanel({ nightId, rsvps, limits }: { nightId: string; rsvps: Rsvp[
             </div>
           ) : null,
         )}
-        {!rsvps.length && <p className="text-dim">No RSVPs yet. Share the link.</p>}
+        {!inList.length && <p className="text-dim">No RSVPs yet. Share the link.</p>}
         {rsvps.length > 0 && (
           <p className="text-sm text-dim">
             Someone locked out (say they RSVPed inside Snapchat and now it doesn&apos;t know them)? Tap Copy link next to their name and send it to just them. It signs them back in as themselves.
@@ -811,6 +869,7 @@ export function NightAdmin(props: {
   accounts: Array<{ device_id: string; nickname: string; body: string }>;
   rsvps: Rsvp[];
   guestLimits: { capacity: number | null };
+  privacy: { privateInvite: boolean; privatePost: boolean; dropped: boolean };
   isAdmin: boolean;
   hosts: Array<{ email: string; name: string }>;
   me: string;
@@ -830,7 +889,7 @@ export function NightAdmin(props: {
   const undecided = props.uploads.filter((u) => u.decision !== "keep" && u.decision !== "toss").length;
   const accountCount = props.accounts.length;
   const approvals = props.review.approvals;
-  const guestHeadcount = props.rsvps.filter((g) => g.answer === "going" && !g.waitlisted).length;
+  const guestHeadcount = props.rsvps.filter((g) => g.approved && g.answer === "going" && !g.waitlisted).length;
   const steps: Step[] = [
     ...(!dropped ? [{ id: "link", n: 1, label: "Link", done: night.phase !== "invite" && night.phase !== "live" }] : []),
     { id: "guests", n: 2, label: "Guests", value: String(guestHeadcount), done: guestHeadcount > 0 },
@@ -877,6 +936,7 @@ export function NightAdmin(props: {
         </p>
       )}
       {!dropped && <LinkPanel nightId={night.id} freshLink={props.freshLink} night={night} invite={props.invite} />}
+      <PrivacyPanel nightId={night.id} privacy={props.privacy} />
       <HostsPanel nightId={night.id} hosts={props.hosts} isAdmin={props.isAdmin} me={props.me} />
       {!dropped && <GuestsPanel nightId={night.id} rsvps={props.rsvps} limits={props.guestLimits} />}
       <AccountsPanel nightId={night.id} accounts={props.accounts} rsvps={props.rsvps} />

@@ -132,7 +132,42 @@ function useAction() {
   return { pending, msg, run };
 }
 
-type MyRsvp = { nickname: string; answer: string; waitlisted: boolean };
+type MyRsvp = { nickname: string; answer: string; waitlisted: boolean; approved?: boolean };
+
+/** Private nights: ask a host to let you in. */
+function AskToCome({ token, current }: { token: string; current: MyRsvp | null }) {
+  const [nickname, setNickname] = useState(current?.nickname ?? "");
+  const [sent, setSent] = useState(Boolean(current && !current.approved));
+  const { pending, msg, run } = useAction();
+  return (
+    <section id="rsvp" className="mt-8 scroll-mt-4 rounded-md border-2 border-maize bg-night-2 p-5">
+      <p className="mono text-maize">Private night</p>
+      <h2 className="display mt-1 text-3xl">{sent ? "Request sent" : "Ask to come"}</h2>
+      <p className="mt-2 text-dim">
+        {sent
+          ? `You asked as ${current?.nickname ?? nickname}. Once a host lets you in, this page shows the details, the guest list and everything else. Check back here.`
+          : "The host lets people in one by one. Add your name or nickname and ask. You'll see the details once you're in."}
+      </p>
+      <label htmlFor="ask-nick" className="mt-4 block font-bold">Your name or nickname</label>
+      <input id="ask-nick" value={nickname} onChange={(e) => setNickname(e.target.value)} maxLength={40} autoComplete="nickname" className="field mt-2 min-h-12 sm:w-72" placeholder="So the host knows it's you" />
+      <button
+        type="button"
+        disabled={pending || !nickname.trim()}
+        onClick={() =>
+          run(async () => {
+            const r = await rsvp(token, nickname, "going");
+            if (r && "ok" in r) setSent(true);
+            return r;
+          }, "Sent. The host will see it.")
+        }
+        className={`${BTN_PRIMARY} mt-4 w-full sm:w-auto`}
+      >
+        {pending ? "Sending…" : sent ? "Update my request" : "Ask to come"}
+      </button>
+      {msg && <p role="status" className={`mt-3 ${msg.ok ? "text-maize" : "text-pink"}`}>{msg.text}</p>}
+    </section>
+  );
+}
 type GuestInfo = { spotsLeft: number | null; waitlist: number };
 
 function Rsvp({ token, current, info }: { token: string; current: MyRsvp | null; info: GuestInfo }) {
@@ -1085,6 +1120,8 @@ export function DropClient(props: {
   me: { path: string; ics: string; google: string } | null;
   emailHint: string | null;
   nightName: string;
+  allowed: boolean;
+  privateInvite: boolean;
   songs: GuestSong[];
   places: { approved: Venue[]; mine: Array<{ id: string; name: string; url: string | null; kind: string }> };
   accountCount: number;
@@ -1093,7 +1130,11 @@ export function DropClient(props: {
   draft: Draft | null;
   draftBody: ReactNode;
 }) {
-  const { token, phase, verified } = props;
+  const { token, phase } = props;
+  // On a private night, people a host hasn't let in yet only get the request form.
+  const human = props.verified;
+  const verified = props.verified && props.allowed;
+  const asking = props.privateInvite && !props.allowed && phase !== "dropped";
   const canAct = phase !== "dropped";
   const showAccount = verified && (phase === "live" || phase === "after");
   const showDraft = verified && Boolean(props.draft);
@@ -1109,9 +1150,10 @@ export function DropClient(props: {
   const review = showDraft ? <Review token={token} draft={props.draft!} body={props.draftBody} wrote={Boolean(props.account)} /> : null;
   return (
     <>
-      {canAct && !verified && <Turnstile token={token} siteKey={props.siteKey} phase={phase} />}
+      {canAct && !human && <Turnstile token={token} siteKey={props.siteKey} phase={phase} />}
+      {human && asking && <AskToCome token={token} current={props.rsvp} />}
       {verified && phase === "invite" && <Rsvp token={token} current={props.rsvp} info={props.guestInfo} />}
-      {(phase === "invite" || phase === "live") && <ShareInvite token={token} name={props.nightName} rsvped={Boolean(props.rsvp)} />}
+      {!props.privateInvite && (phase === "invite" || phase === "live") && <ShareInvite token={token} name={props.nightName} rsvped={Boolean(props.rsvp)} />}
       {verified && canAct && props.me && <SaveSpot token={token} me={props.me} emailHint={props.emailHint} />}
       {verified && canAct && <GuestSongs token={token} songs={props.songs} />}
       {verified && canAct && phase !== "invite" && <GuestPlaces token={token} places={props.places} />}
@@ -1120,7 +1162,7 @@ export function DropClient(props: {
       {showDraft && draftFirst && review}
       {showAccount && <Account token={token} account={props.account} defaultName={props.rsvp?.nickname ?? ""} count={props.accountCount} photos={props.storyPhotos} />}
       {showDraft && !draftFirst && review}
-      {phase !== "invite" && <Album token={token} items={props.album} canCaption={verified && canAct} />}
+      {phase !== "invite" && !asking && <Album token={token} items={props.album} canCaption={verified && canAct} />}
       {/* Room so the sticky upload bar never covers the last thing on the page. */}
       {verified && phase === "live" && <div aria-hidden className="h-24 sm:hidden" />}
     </>

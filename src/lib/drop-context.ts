@@ -14,12 +14,22 @@ export async function dropContext(token: string) {
   if (!night || (!night.album_open && (night.status === "dropped" || night.status === "closed"))) return null;
   const device = await deviceId();
   const verified = await isVerified(env.AUTH_SECRET, night.id, device);
-  return { env, night, device, verified, ipHash: () => ipHash(env.AUTH_SECRET) };
+  // Private nights: only devices a host approved get past the invite.
+  const allowed =
+    !night.private_invite ||
+    Boolean(device && (await env.DB.prepare("SELECT 1 FROM night_rsvps WHERE night_id = ? AND device_id = ? AND approved = 1").bind(night.id, device).first()));
+  return { env, night, device, verified, allowed, ipHash: () => ipHash(env.AUTH_SECRET) };
 }
 
 export type DropContext = NonNullable<Awaited<ReturnType<typeof dropContext>>>;
 
+/** A person who passed the bot check and, on a private night, was let in by a host. */
 export function requireVerified(ctx: DropContext): ctx is DropContext & { device: string } {
+  return Boolean(ctx.verified && ctx.device && ctx.allowed);
+}
+
+/** Passed the bot check (enough to RSVP or request a spot, even before approval). */
+export function requireHuman(ctx: DropContext): ctx is DropContext & { device: string } {
   return Boolean(ctx.verified && ctx.device);
 }
 

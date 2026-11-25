@@ -22,6 +22,8 @@ export type Night = {
   invite_media_kind: "video" | "photo" | null;
   og_key: string | null;
   created_by: string;
+  private_invite: number;
+  private_post: number;
   og_sig: string | null;
   status: NightStatus;
   max_files: number;
@@ -62,7 +64,7 @@ export type Draft = {
   created_at: string;
 };
 
-const NIGHT_COLUMNS = `id, created_by, name, night_of, opens_at, closes_at, invite_details, location_text, dress_code, venues, capacity, max_plus_ones, invite_rules, invite_media_key, invite_media_kind, og_key, og_sig, status, max_files, max_bytes, per_device_files, album_open,
+const NIGHT_COLUMNS = `id, created_by, private_invite, private_post, name, night_of, opens_at, closes_at, invite_details, location_text, dress_code, venues, capacity, max_plus_ones, invite_rules, invite_media_key, invite_media_kind, og_key, og_sig, status, max_files, max_bytes, per_device_files, album_open,
   drop_at, drop_fields, generations, generating_since, post_id, created_at`;
 
 export async function getNight(id: string): Promise<Night | null> {

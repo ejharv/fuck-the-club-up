@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { encryptText, randomToken, sha256Hex } from "@/lib/crypto";
-import { promoteWaitlist } from "@/lib/guests";
+import { approveStatement, promoteWaitlist } from "@/lib/guests";
 import { runDrop, type DropFields } from "@/lib/drop";
 import { cf } from "@/lib/env";
 import { defaultClosesAt, getNight, isStuckDrop, latestDraft } from "@/lib/nights";
@@ -77,11 +77,12 @@ export async function createNight(_prev: AdminResult, form: FormData): Promise<A
     const token = randomToken();
     const id = crypto.randomUUID();
     await env.DB.prepare(
-      `INSERT INTO nights (id, name, night_of, token_hash, token_enc, capacity, max_plus_ones, opens_at, closes_at, invite_details, location_text, dress_code, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO nights (id, name, night_of, token_hash, token_enc, capacity, max_plus_ones, opens_at, closes_at, invite_details, location_text, dress_code, created_by, created_at, private_invite, private_post)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(id, name, nightOf, await sha256Hex(token), await encryptText(env.AUTH_SECRET, token), limits.capacity, limits.maxPlusOnes, opensAt, closesAt, clean(form.get("details"), 2000),
-        clean(form.get("location"), 200), clean(form.get("dressCode"), 100), admin.email, new Date().toISOString())
+        clean(form.get("location"), 200), clean(form.get("dressCode"), 100), admin.email, new Date().toISOString(),
+        form.get("privateInvite") === "on" ? 1 : 0, form.get("privatePost") === "on" ? 1 : 0)
       .run();
     // The creator is a host (so they can appear in "Hosted by").
     await env.DB.prepare("INSERT OR IGNORE INTO night_hosts (night_id, email, added_by, created_at) VALUES (?, ?, 'creator', ?)")
@@ -264,6 +265,36 @@ export async function removeGuestPlaceAdmin(nightId: string, id: string): Promis
   try {
     const { env, night } = await adminNight(nightId);
     await env.DB.prepare("DELETE FROM night_places WHERE id = ? AND night_id = ?").bind(String(id), night.id).run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Let a request in (private nights). */
+export async function approveRsvp(nightId: string, deviceId: string): Promise<AdminResult> {
+  try {
+    const { env, night } = await adminNight(nightId);
+    await approveStatement(env.DB, night.id, String(deviceId)).run();
+    revalidatePath(`/nights/${night.id}`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Private night switches: approval to get in, and a private write-up. */
+export async function setPrivacy(nightId: string, p: { privateInvite: boolean; privatePost: boolean }): Promise<AdminResult> {
+  try {
+    const { env, night } = await adminNight(nightId);
+    const stmts = [env.DB.prepare("UPDATE nights SET private_invite = ?, private_post = ? WHERE id = ?").bind(p.privateInvite ? 1 : 0, p.privatePost ? 1 : 0, night.id)];
+    // Turning approval off lets everyone who asked in.
+    if (!p.privateInvite) stmts.push(env.DB.prepare("UPDATE night_rsvps SET approved = 1 WHERE night_id = ? AND approved = 0").bind(night.id));
+    // A night that already dropped: keep its post in step.
+    if (night.post_id) stmts.push(env.DB.prepare("UPDATE posts SET private = ? WHERE id = ?").bind(p.privatePost ? 1 : 0, night.post_id));
+    await env.DB.batch(stmts);
+    if (!p.privateInvite) await promoteWaitlist(env.DB, night.id);
     revalidatePath(`/nights/${night.id}`);
     return { ok: true };
   } catch (e) {

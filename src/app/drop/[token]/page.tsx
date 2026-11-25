@@ -48,7 +48,8 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   const { token } = await params;
   const ctx = await dropContext(token);
   if (!ctx) return <Closed />;
-  const { env, night, device, verified } = ctx;
+  const { env, night, device, verified, allowed } = ctx;
+  const asking = Boolean(night.private_invite) && !allowed;
   const phase = phaseOf(night);
   const DB = env.DB;
 
@@ -59,15 +60,15 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   ).results.map((h) => h.display_name);
   const hostedBy = hostNames.length > 1 ? `${hostNames.slice(0, -1).join(", ")} & ${hostNames[hostNames.length - 1]}` : hostNames[0] ?? null;
   const [rsvps, mine, album, draft, accountCount, post] = await Promise.all([
-    DB.prepare("SELECT device_id, nickname, answer, plus_ones, waitlisted FROM night_rsvps WHERE night_id = ? ORDER BY created_at")
+    DB.prepare("SELECT device_id, nickname, answer, plus_ones, waitlisted, approved FROM night_rsvps WHERE night_id = ? ORDER BY created_at")
       .bind(night.id)
-      .all<{ device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number }>(),
+      .all<{ device_id: string; nickname: string; answer: string; plus_ones: number; waitlisted: number; approved: number }>(),
     device
       ? DB.prepare("SELECT nickname, body FROM night_accounts WHERE night_id = ? AND device_id = ?")
           .bind(night.id, device)
           .first<{ nickname: string; body: string }>()
       : null,
-    night.album_open ? listAlbum(night.id) : Promise.resolve([]),
+    night.album_open && allowed ? listAlbum(night.id) : Promise.resolve([]),
     latestDraft(night.id),
     DB.prepare("SELECT COUNT(*) AS n FROM night_accounts WHERE night_id = ?").bind(night.id).first<{ n: number }>(),
     night.post_id ? DB.prepare("SELECT slug FROM posts WHERE id = ?").bind(night.post_id).first<{ slug: string }>() : null,
@@ -88,7 +89,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
   }
 
   const myRsvp = rsvps.results.find((r) => r.device_id === device) ?? null;
-  const pickable = night.album_open
+  const pickable = asking ? [] : night.album_open
     ? album
     : device
       ? (
@@ -115,7 +116,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
     ? await DB.prepare("SELECT email_hint FROM night_emails WHERE night_id = ? AND device_id = ?").bind(night.id, device).first<{ email_hint: string }>()
     : null;
   let me: { path: string; ics: string; google: string } | null = null;
-  if (device && verified && (myRsvp || mine)) {
+  if (device && verified && allowed && (myRsvp || mine)) {
     const pass = await mePass(env.AUTH_SECRET, night.id, device);
     const path = `/drop/${token}/me/${pass}`;
     const origin = await requestOrigin();
@@ -128,14 +129,16 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
     if (night.location_text) google.searchParams.set("location", night.location_text);
     me = { path, ics: `${path}/calendar.ics`, google: google.toString() };
   }
-  const going = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).map((r) => r.nickname);
-  const maybe = rsvps.results.filter((r) => r.answer === "maybe").map((r) => r.nickname);
-  const headcount = rsvps.results.filter((r) => r.answer === "going" && !r.waitlisted).length;
-  const waitlistCount = rsvps.results.filter((r) => r.answer === "going" && r.waitlisted).length;
+  const inList = rsvps.results.filter((r) => r.approved);
+  const going = inList.filter((r) => r.answer === "going" && !r.waitlisted).map((r) => r.nickname);
+  const maybe = inList.filter((r) => r.answer === "maybe").map((r) => r.nickname);
+  const headcount = inList.filter((r) => r.answer === "going" && !r.waitlisted).length;
+  const waitlistCount = inList.filter((r) => r.answer === "going" && r.waitlisted).length;
   const spotsLeft = night.capacity === null ? null : Math.max(0, night.capacity - headcount);
 
-  const lede =
-    phase === "invite"
+  const lede = asking
+    ? "This is a private night. Ask to come, and once a host lets you in you'll see the details, who's coming and everything else."
+    : phase === "invite"
       ? "This is the party link. RSVP now; once the night starts, this same link takes the photos."
       : phase === "live"
         ? "It's on. Drop your photos and videos and tell your side. It all becomes one post."
@@ -149,7 +152,9 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         phase={phase}
         verified={verified}
         siteKey={env.TURNSTILE_SITE_KEY}
-        rsvp={myRsvp ? { nickname: myRsvp.nickname, answer: myRsvp.answer, waitlisted: Boolean(myRsvp.waitlisted) } : null}
+        rsvp={myRsvp ? { nickname: myRsvp.nickname, answer: myRsvp.answer, waitlisted: Boolean(myRsvp.waitlisted), approved: Boolean(myRsvp.approved) } : null}
+        allowed={allowed}
+        privateInvite={Boolean(night.private_invite)}
         guestInfo={{ spotsLeft, waitlist: waitlistCount }}
         account={mine ?? null}
         me={me}
@@ -227,7 +232,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
         </section>
       )}
 
-      {phase === "invite" && (
+      {phase === "invite" && !asking && (
         <dl className="mt-6 grid gap-3 rounded-md border-2 border-dashed border-maize p-4 sm:grid-cols-2 sm:gap-4 sm:p-5">
           <div>
             <dt className="mono text-maize">When</dt>
@@ -267,7 +272,7 @@ export default async function DropPage({ params }: { params: Promise<{ token: st
 
       {client}
 
-      {phase === "invite" && (
+      {phase === "invite" && !asking && (
         <section className="mt-10 space-y-6">
           <div>
             <h2 className="mono text-maize">

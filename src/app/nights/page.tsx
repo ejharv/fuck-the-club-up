@@ -24,7 +24,7 @@ export default async function NightsPage() {
   const { results } = await env.DB.prepare(
     `SELECT n.*, (SELECT COUNT(*) FROM night_uploads u WHERE u.night_id = n.id AND u.uploaded = 1) AS files,
             (SELECT COUNT(*) FROM night_accounts a WHERE a.night_id = n.id) AS accounts,
-            (SELECT COALESCE(SUM(1 + r.plus_ones), 0) FROM night_rsvps r WHERE r.night_id = n.id AND r.answer = 'going' AND r.waitlisted = 0) AS going
+            (SELECT COALESCE(SUM(1 + r.plus_ones), 0) FROM night_rsvps r WHERE r.night_id = n.id AND r.answer = 'going' AND r.waitlisted = 0 AND r.approved = 1) AS going
        FROM nights n
       WHERE ?1 = 1 OR EXISTS (SELECT 1 FROM night_hosts h WHERE h.night_id = n.id AND h.email = ?2)
       ORDER BY n.night_of DESC, n.created_at DESC`,

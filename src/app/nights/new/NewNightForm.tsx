@@ -43,6 +43,24 @@ export function NewNightForm() {
         </div>
         <p className="mt-2 text-sm text-dim">Guests can share the invite, and everyone RSVPs for themselves. Once the limit is hit, new RSVPs go on a waitlist and move up automatically when spots open. You can change it later.</p>
       </fieldset>
+      <fieldset className="min-w-0 rounded-md border border-dashed border-line p-4">
+        <legend className="mono px-2 text-maize">Private night</legend>
+        <label className="flex cursor-pointer gap-3 py-1">
+          <input type="checkbox" name="privateInvite" className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />
+          <span>
+            <strong>Approval to get in</strong>
+            <span className="block text-sm text-dim">People ask to come and you approve each one. Until then they only see the name, time and invite video, not the location, guest list or photos. No share button.</span>
+          </span>
+        </label>
+        <label className="mt-2 flex cursor-pointer gap-3 py-1">
+          <input type="checkbox" name="privatePost" className="mt-1 h-6 w-6 shrink-0 accent-[var(--maize)]" />
+          <span>
+            <strong>Write-up stays private</strong>
+            <span className="block text-sm text-dim">The post stays off the public site, Places and Playlists. Only crew and people from the night can read it.</span>
+          </span>
+        </label>
+        <p className="mt-2 text-sm text-dim">You can change both later.</p>
+      </fieldset>
       <div>
         <label htmlFor="details" className="mb-2 block font-bold">The invite (optional)</label>
         <textarea id="details" name="details" rows={4} maxLength={2000} className="field" placeholder="Pregame at 9, Rick's by 10:30, Pizza House after." />

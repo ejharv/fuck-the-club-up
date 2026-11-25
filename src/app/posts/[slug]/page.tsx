@@ -6,7 +6,8 @@ import { StoryBody } from "@/components/StoryBody";
 import { MEDIA_RE } from "@/lib/inline-media";
 import { PlaceholderBadge } from "@/components/PostCard";
 import { Wristband } from "@/components/Wristband";
-import { getPost, type MediaRow } from "@/lib/db";
+import { canReadPrivatePost, getPost, type MediaRow } from "@/lib/db";
+import { deviceId } from "@/lib/nights";
 import { toEmbed } from "@/lib/embeds";
 import { cf } from "@/lib/env";
 import { mediaUrl } from "@/lib/media-url";
@@ -25,6 +26,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   if (!found) return {};
   const env = await cf();
   const { post } = found;
+  // Private write-ups don't leak their title or photos into link previews or search.
+  if (post.private) return { title: "A private night", robots: { index: false, follow: false } };
   return {
     title: post.title,
     description: post.dek ?? undefined,
@@ -106,6 +109,8 @@ export default async function PostPage({ params }: Props) {
   if (!found) notFound();
   const { post, media } = found;
   const [env, member, venues, songs] = await Promise.all([cf(), currentMember(), postVenues(found.post.id), postSongs(found.post.id)]);
+  // Private write-ups: crew, or people from that night. Everyone else gets a plain 404.
+  if (post.private && !(await canReadPrivatePost(post.id, Boolean(member), await deviceId()))) notFound();
   const section = sectionBySlug(post.section);
   const canEdit = Boolean(member && (member.email === post.author_email || member.role === "admin"));
   // Photos sit in a 2-up grid; with an odd count the first one runs full width so nothing is left hanging.

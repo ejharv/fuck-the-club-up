@@ -18,6 +18,7 @@ export type PostRow = {
   body: string;
   cover_key: string | null;
   placeholder: number;
+  private?: number;
   author_email: string;
   author_name: string | null;
   published_at: string;
@@ -58,8 +59,8 @@ const FEED_ORDER = "ORDER BY COALESCE(night_of, substr(published_at, 1, 10)) DES
 export async function listPosts({ section, limit = 60 }: { section?: string; limit?: number } = {}): Promise<PostRow[]> {
   const { DB } = await cf();
   const stmt = section
-    ? DB.prepare(`SELECT ${LIST_COLUMNS} FROM posts WHERE section = ? ${FEED_ORDER} LIMIT ?`).bind(section, limit)
-    : DB.prepare(`SELECT ${LIST_COLUMNS} FROM posts ${FEED_ORDER} LIMIT ?`).bind(limit);
+    ? DB.prepare(`SELECT ${LIST_COLUMNS} FROM posts WHERE section = ? AND private = 0 ${FEED_ORDER} LIMIT ?`).bind(section, limit)
+    : DB.prepare(`SELECT ${LIST_COLUMNS} FROM posts WHERE private = 0 ${FEED_ORDER} LIMIT ?`).bind(limit);
   const { results } = await stmt.all<PostRow>();
   return results;
 }
@@ -81,10 +82,30 @@ export async function listNewThisWeek(limit = 6): Promise<PostRow[]> {
   const { DB } = await cf();
   const since = new Date(Date.now() - 7 * 864e5).toISOString();
   const { results } = await DB.prepare(
-    `SELECT ${LIST_COLUMNS} FROM posts WHERE published_at >= ? AND night_of IS NOT NULL AND night_of < substr(published_at, 1, 10)
+    `SELECT ${LIST_COLUMNS} FROM posts WHERE private = 0 AND published_at >= ? AND night_of IS NOT NULL AND night_of < substr(published_at, 1, 10)
      ORDER BY published_at DESC LIMIT ?`,
   )
     .bind(since, limit)
     .all<PostRow>();
   return results;
+}
+
+/**
+ * A private write-up can be read by crew members, and by people from that
+ * night: a device with an approved RSVP, a story or an upload on it.
+ */
+export async function canReadPrivatePost(postId: string, isMember: boolean, device: string | null): Promise<boolean> {
+  if (isMember) return true;
+  if (!device) return false;
+  const { DB } = await cf();
+  const row = await DB.prepare(
+    `SELECT 1 FROM nights n WHERE n.post_id = ?1 AND (
+        EXISTS (SELECT 1 FROM night_rsvps r WHERE r.night_id = n.id AND r.device_id = ?2 AND r.approved = 1)
+     OR EXISTS (SELECT 1 FROM night_accounts a WHERE a.night_id = n.id AND a.device_id = ?2)
+     OR EXISTS (SELECT 1 FROM night_uploads u WHERE u.night_id = n.id AND u.device_id = ?2))
+     LIMIT 1`,
+  )
+    .bind(postId, device)
+    .first();
+  return Boolean(row);
 }

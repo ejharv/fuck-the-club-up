@@ -55,9 +55,9 @@ export async function copyBatch(env: CloudflareEnv, nightId: string): Promise<nu
 
 /** Inserts the post from copied files and marks the night dropped. Idempotent. */
 export async function finishDrop(env: CloudflareEnv, nightId: string): Promise<string | null> {
-  const night = await env.DB.prepare("SELECT status, night_of, drop_fields, post_id FROM nights WHERE id = ?")
+  const night = await env.DB.prepare("SELECT status, night_of, drop_fields, post_id, private_post FROM nights WHERE id = ?")
     .bind(nightId)
-    .first<{ status: string; night_of: string; drop_fields: string | null; post_id: string | null }>();
+    .first<{ status: string; night_of: string; drop_fields: string | null; post_id: string | null; private_post: number }>();
   if (!night || !night.drop_fields) return null;
   if (night.post_id) return night.post_id;
   const f = JSON.parse(night.drop_fields) as DropFields;
@@ -84,6 +84,7 @@ export async function finishDrop(env: CloudflareEnv, nightId: string): Promise<s
   const collections = await collectionStatements(env.DB, insert.id, f.venues ?? [], f.songs ?? [], insert.mediaRows);
   await env.DB.batch([
     ...insert.stmts,
+    env.DB.prepare("UPDATE posts SET private = ? WHERE id = ?").bind(night.private_post ? 1 : 0, insert.id),
     ...collections,
     env.DB.prepare("UPDATE nights SET status = 'dropped', post_id = ?, drop_at = NULL WHERE id = ? AND post_id IS NULL").bind(insert.id, nightId),
   ]);

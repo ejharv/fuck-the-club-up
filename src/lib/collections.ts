@@ -84,6 +84,7 @@ export async function listPlaces(): Promise<PlaceSummary[]> {
   const { results } = await DB.prepare(
     `SELECT v.place_key, v.name, v.url, v.kind, p.slug, p.title, p.night_of, p.published_at
        FROM post_venues v JOIN posts p ON p.id = v.post_id
+      WHERE p.private = 0
       ORDER BY COALESCE(p.night_of, substr(p.published_at, 1, 10)) DESC, p.published_at DESC`,
   ).all<{ place_key: string; name: string; url: string | null; kind: VenueKind; slug: string; title: string; night_of: string | null; published_at: string }>();
   const map = new Map<string, PlaceSummary>();
@@ -108,6 +109,7 @@ export async function listPlaylists(): Promise<NightPlaylist[]> {
   const { results } = await DB.prepare(
     `SELECT p.slug, p.title, p.night_of, p.published_at, t.title AS t_title, t.artist, t.url, t.source, t.media_id
        FROM post_tracks t JOIN posts p ON p.id = t.post_id
+      WHERE p.private = 0
       ORDER BY COALESCE(p.night_of, substr(p.published_at, 1, 10)) DESC, p.published_at DESC, t.position`,
   ).all<{ slug: string; title: string; night_of: string | null; published_at: string; t_title: string; artist: string | null; url: string | null; source: TrackRow["source"]; media_id: string | null }>();
   const out: NightPlaylist[] = [];

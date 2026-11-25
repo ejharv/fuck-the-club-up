@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { dropContext, requireVerified } from "@/lib/drop-context";
+import { dropContext, requireHuman, requireVerified } from "@/lib/drop-context";
 import { clean } from "@/lib/post-fields";
 import { promoteWaitlist, rsvpStatement } from "@/lib/guests";
 import { isReviewable, latestDraft, phaseOf, nameTaken } from "@/lib/nights";
@@ -160,33 +160,47 @@ export async function removeGuestSong(token: string, id: string): Promise<DropRe
   return { ok: true };
 }
 
-export type DropResult = { error: string } | { ok: true; waitlisted?: boolean } | undefined;
+export type DropResult = { error: string } | { ok: true; waitlisted?: boolean; pending?: boolean } | undefined;
 
 async function ctxFor(token: string) {
   const ctx = await dropContext(String(token));
   if (!ctx) return { error: "This link's closed." } as const;
-  if (!requireVerified(ctx)) return { error: "Confirm you're a person first." } as const;
+  if (!requireHuman(ctx)) return { error: "Confirm you're a person first." } as const;
+  if (!requireVerified(ctx)) return { error: "This is a private night. Ask to come first, and you're in once a host says yes." } as const;
+  return ctx;
+}
+
+/** RSVPs and requests: a person, not yet necessarily approved. */
+async function ctxForRequest(token: string) {
+  const ctx = await dropContext(String(token));
+  if (!ctx) return { error: "This link's closed." } as const;
+  if (!requireHuman(ctx)) return { error: "Confirm you're a person first." } as const;
   return ctx;
 }
 
 const nick = (v: unknown) => clean(v, 40);
 
 export async function rsvp(token: string, nickname: string, answer: string): Promise<DropResult> {
-  const ctx = await ctxFor(token);
+  const ctx = await ctxForRequest(token);
   if ("error" in ctx) return ctx;
-  if (phaseOf(ctx.night) !== "invite" && phaseOf(ctx.night) !== "live") return { error: "RSVPs are closed for this one." };
+  const phase = phaseOf(ctx.night);
+  // On a private night, people not let in yet can ask any time before the drop.
+  const asking = Boolean(ctx.night.private_invite) && !ctx.allowed;
+  if (asking ? phase === "dropped" : phase !== "invite" && phase !== "live") return { error: "RSVPs are closed for this one." };
+  if (asking && (await rateLimited(ctx.env, `request:${await ctx.ipHash()}`))) return { error: "Slow down a sec and try again." };
   const name = nick(nickname);
   if (!name) return { error: "Add your name or a nickname so the host knows who's coming." };
   if (!["going", "maybe", "cant"].includes(answer)) return { error: "Pick going, maybe or can't." };
   if (await nameTaken(ctx.env.DB, ctx.night.id, ctx.device, name)) {
     return { error: `Someone already RSVPed as "${name}". Add an initial or pick another nickname. If that's you (say you RSVPed in Snapchat), ask the host to send you your link.` };
   }
-  await rsvpStatement(ctx.env.DB, ctx.night.id, ctx.device, name, answer, 0).run();
+  await rsvpStatement(ctx.env.DB, ctx.night.id, ctx.device, name, answer, 0, ctx.night.private_invite ? 0 : 1).run();
   await promoteWaitlist(ctx.env.DB, ctx.night.id);
-  const mine = await ctx.env.DB.prepare("SELECT waitlisted FROM night_rsvps WHERE night_id = ? AND device_id = ?")
+  const mine = await ctx.env.DB.prepare("SELECT waitlisted, approved FROM night_rsvps WHERE night_id = ? AND device_id = ?")
     .bind(ctx.night.id, ctx.device)
-    .first<{ waitlisted: number }>();
+    .first<{ waitlisted: number; approved: number }>();
   revalidatePath(`/drop/${token}`);
+  if (mine && !mine.approved) return { ok: true, pending: true };
   return { ok: true, waitlisted: Boolean(mine?.waitlisted) };
 }
 

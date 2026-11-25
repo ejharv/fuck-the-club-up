@@ -9,7 +9,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
   const { token, pass } = await params;
   const ctx = await dropContext(token);
   if (!ctx) return closedResponse();
-  if (!(await checkMePass(ctx.env.AUTH_SECRET, ctx.night.id, pass))) return new Response("Not found", { status: 404 });
+  const device = await checkMePass(ctx.env.AUTH_SECRET, ctx.night.id, pass);
+  if (!device) return new Response("Not found", { status: 404 });
+  // Private nights: the calendar has the location, so only for people a host let in.
+  if (ctx.night.private_invite) {
+    const ok = await ctx.env.DB.prepare("SELECT 1 FROM night_rsvps WHERE night_id = ? AND device_id = ? AND approved = 1").bind(ctx.night.id, device).first();
+    if (!ok) return new Response("Not found", { status: 404 });
+  }
   const link = new URL(`/drop/${token}/me/${pass}`, req.url).toString();
   const n = ctx.night;
   const ics = [

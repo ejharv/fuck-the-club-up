@@ -5,7 +5,7 @@ import { serveObject } from "@/lib/serve-r2";
 export async function GET(req: Request, { params }: { params: Promise<{ token: string; key: string[] }> }) {
   const { token, key: parts } = await params;
   const ctx = await dropContext(token);
-  if (!ctx || !ctx.night.album_open) return closedResponse();
+  if (!ctx || !ctx.night.album_open || !ctx.allowed) return closedResponse();
   const key = parts.join("/");
   if (!key.startsWith(`nights/${ctx.night.id}/`) || key.includes("..")) return closedResponse();
   const row = await ctx.env.DB.prepare("SELECT 1 FROM night_uploads WHERE r2_key = ? AND night_id = ? AND uploaded = 1")
